@@ -3961,7 +3961,6 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Builder.CreateStore(FrameAddr, Buf);
 
     BasicBlock *Continuation = createBasicBlock("cont", this->CurFn);
-    /*EmitBlock(Continuation);*/
     Builder.CreateStore(BlockAddress::get(Continuation),
                         Builder.CreateConstInBoundsGEP(Buf, 1));
 
@@ -3980,6 +3979,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Address FnArg = EmitPointerWithAlignment(E->getArg(2));
     CallBase *Call =
       Builder.CreateCall(FTy, FnAddr.getPointer(), FnArg.getPointer());
+    // TODO: Currently this magically causes CallBase::doesNotReturn to
+    // say the call may return.  That should be more explicit.
     Call->setCallingConv(llvm::CallingConv::PreserveNone);
 
     Builder.CreateBr(Continuation);
@@ -3988,6 +3989,25 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     Builder.SetInsertPoint(Continuation);
 
     return RValue::getIgnored();
+  }
+  case Builtin::BI__builtin_resume_continuation: {
+    llvm::Function *Resume = CGM.getIntrinsic(Intrinsic::eh_sjlj_resume);
+    Value *Buf = EmitScalarExpr(E->getArg(0));
+    Buf = Builder.CreateBitCast(Buf, Int8PtrTy);
+    Address FnA = EmitPointerWithAlignment(E->getArg(1));
+    Value *Fn = Builder.CreateBitCast(FnA.getPointer(), Int8PtrTy);
+
+    SmallVector<llvm::Value *, 2> Args = { Buf, Fn };
+
+    Builder.CreateCall(Resume, Args);
+
+    // longjmp doesn't return; mark this as unreachable.
+    Builder.CreateUnreachable();
+
+    // We do need to preserve an insertion point.
+    EmitBlock(createBasicBlock("longjmp.cont"));
+
+    return RValue::get(nullptr);
   }
   case Builtin::BI__builtin_setjmp: {
     // Buffer is a void**.

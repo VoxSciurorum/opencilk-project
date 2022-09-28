@@ -1863,7 +1863,12 @@ public:
     addFnAttr(Attribute::InaccessibleMemOrArgMemOnly);
   }
   /// Determine if the call cannot return.
-  bool doesNotReturn() const { return hasFnAttr(Attribute::NoReturn); }
+  bool doesNotReturn() const {
+    // TODO: Make this cleaner
+    if (getCallingConv() == CallingConv::PreserveNone)
+      return false;
+    return hasFnAttr(Attribute::NoReturn);
+  }
   void setDoesNotReturn() { addFnAttr(Attribute::NoReturn); }
 
   /// Determine if the call should not perform indirect branch tracking.

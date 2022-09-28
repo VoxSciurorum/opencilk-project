@@ -68,6 +68,7 @@
 // C -> const
 // D -> volatile
 // R -> restrict
+// % -> function returning void with single argument of postfixed type
 
 // The third value provided to the macro specifies information about attributes
 // of the function.  These must be kept in sync with the predicates in the
@@ -1695,7 +1696,9 @@ BUILTIN(__hyper_lookup, "v*vC*", "nU")
 
 // Support for Tapir
 BUILTIN(__builtin_continuation, "vv**v*", "n")
-BUILTIN(__builtin_call_continuation, "vv**v*v*", "")
+BUILTIN(__builtin_call_continuation, "vv**v*%v*", "")
+// Insert a call to the third argument after restoring the stack pointer
+BUILTIN(__builtin_resume_continuation, "vv**v%", "r")
 
 #undef BUILTIN
 #undef LIBBUILTIN

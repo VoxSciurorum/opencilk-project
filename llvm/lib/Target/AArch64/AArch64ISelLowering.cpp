@@ -860,6 +860,7 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
 
   setOperationAction(ISD::EH_SJLJ_SETJMP, MVT::i32, Custom);
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
+  setOperationAction(ISD::EH_SJLJ_RESUME, MVT::Other, Custom);
 
   // Indexed loads and stores are supported.
   for (unsigned im = (unsigned)ISD::PRE_INC;
@@ -2284,6 +2285,7 @@ const char *AArch64TargetLowering::getTargetNodeName(unsigned Opcode) const {
     MAKE_CASE(AArch64ISD::CALL_BTI)
     MAKE_CASE(AArch64ISD::EH_SJLJ_SETJMP)
     MAKE_CASE(AArch64ISD::EH_SJLJ_LONGJMP)
+    MAKE_CASE(AArch64ISD::EH_SJLJ_RESUME)
   }
 #undef MAKE_CASE
   return nullptr;
@@ -5280,6 +5282,7 @@ SDValue AArch64TargetLowering::LowerOperation(SDValue Op,
   case ISD::EH_SJLJ_SETJMP:
     return LowerSetjmp(Op, DAG);
   case ISD::EH_SJLJ_LONGJMP:
+  case ISD::EH_SJLJ_RESUME:
     return LowerLongjmp(Op, DAG);
   }
 }
@@ -20071,6 +20074,13 @@ SDValue AArch64TargetLowering::LowerLongjmp(SDValue Op,
                      Op.getOperand(0), Op.getOperand(1));
 }
 
+SDValue AArch64TargetLowering::LowerResume(SDValue Op,
+                                           SelectionDAG &DAG) const {
+  return DAG.getNode(AArch64ISD::EH_SJLJ_RESUME, SDLoc(Op), MVT::Other,
+                     Op.getOperand(0), Op.getOperand(1),
+                     Op.getOperand(2));
+}
+
 MachineBasicBlock *
 AArch64TargetLowering::EmitSetjmp(MachineInstr &MI,
                                   MachineBasicBlock *MBB) const {
@@ -20196,6 +20206,7 @@ AArch64TargetLowering::EmitSetjmp(MachineInstr &MI,
 MachineBasicBlock *
 AArch64TargetLowering::EmitLongjmp(MachineInstr &MI,
                                    MachineBasicBlock *MBB) const {
+  bool Interposed = false;
   MachineFunction *MF = MBB->getParent();
   MachineRegisterInfo &MRI = MF->getRegInfo();
   const TargetInstrInfo *TII = Subtarget->getInstrInfo();
@@ -20217,6 +20228,9 @@ AArch64TargetLowering::EmitLongjmp(MachineInstr &MI,
     AddrReg = AddrTmp;
     MI.getOperand(0).ChangeToRegister(AddrTmp, false, false, true);
   }
+  if (Interposed) {
+
+  }
 
   // FP, PC
   MIB = BuildMI(*MBB, MI, DL, TII->get(AArch64::LDPXi));
@@ -20236,8 +20250,15 @@ AArch64TargetLowering::EmitLongjmp(MachineInstr &MI,
   MIB.addReg(StackReg);
   MIB.addImm(0); // immediate
   MIB.addImm(0); // shift count
+  if (Interposed) {
+    // Either ORRXrs or ADDXri
+    MIB = BuildMI(*MBB, MI, DL, TII->get(AArch64::ORRXrs), AArch64::LR);
+    MIB.addReg(AArch64::XZR);
+    MIB.addReg(PC);
+    MIB.addImm(0); // shift count
+  }
   MIB = BuildMI(*MBB, MI, DL, TII->get(AArch64::BR));
-  MIB.addReg(PC);
+  MIB.addReg(Interposed ? MI.getOperand(1).getReg() : PC);
   MI.eraseFromParent();
   return MBB;
 }
