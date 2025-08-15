@@ -2109,7 +2109,8 @@ ExprResult
 Sema::ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
                             SourceLocation Loc, Expr *Value, bool Perform) {
   QualType In = Value->getType();
-  assert(!In->isDependentType());
+  if (In->isDependentType())
+    return ExprResult();
 
   auto GetCilkType =
     [this,Loc](Builtin::ID Id, unsigned Arg) -> QualType {
