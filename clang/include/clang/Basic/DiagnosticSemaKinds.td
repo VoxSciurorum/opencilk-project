@@ -11124,6 +11124,22 @@ def err_invalid_reducer_callback : Error<
   "reducer callback must be function with %0 pointer parameter%s0"
 >;
 
+def err_non_lvalue_reducer_callback : Error<
+  "reducer callback must be an lvalue"
+>;
+
+def warn_reducer_callback_side_effects : Warning<
+  "reducer callback has side effects"
+>;
+
+def err_view_must_be_class : Error<
+  "view type must be a class when hyperobject has no callbacks"
+>;
+
+def err_callbacks_must_be_class : Error<
+  "hyperobject callback must be a class"
+>;
+
 def note_protected_by_reducer : Note<
   "jump bypasses initialization of variable with __attribute__((reducer))">;
 

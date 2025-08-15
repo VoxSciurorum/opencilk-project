@@ -1991,113 +1991,167 @@ QualType Sema::BuildReferenceType(QualType T, bool SpelledAsLValue,
   return Context.getRValueReferenceType(T);
 }
 
-// Return value is always non-null.
-Expr *Sema::ValidateReducerCallback(Expr *E, unsigned NumArgs,
-                                    SourceLocation Loc) {
-  if (!E)
-    E = new (Context) CXXNullPtrLiteralExpr(Context.NullPtrTy, Loc);
-
-  QualType T = E->getType();
-
-  // If the type is dependent it will be checked again later, if necessary.
-  if (T->isDependentType() || T == Context.VoidPtrTy)
-    return E;
-
+static unsigned ClassifyReducerCallback(Expr *C)
+{
+  QualType T = C->getType();
+  if (T->isFunctionType())
+    return Builtin::BI__hyper_lookup_c;
+  if (T->isPointerType())
+    return Builtin::BI__hyper_lookup_c;
   if (T->isNullPtrType())
-    return ImplicitCastExpr::Create(Context, Context.VoidPtrTy,
-                                    CK_NullToPointer, E, nullptr, VK_PRValue,
-                                    FPOptionsOverride());
-
-  if (T->isFunctionType()) {
-    E = ImplicitCastExpr::Create(Context, Context.getPointerType(T),
-                                 CK_FunctionToPointerDecay, E, nullptr,
-                                 VK_PRValue, FPOptionsOverride());
-    T = E->getType(); // Context.getDecayedType(T);
+    return Builtin::BI__hyper_lookup_c;
+  if (T->isRecordType())
+    return Builtin::BI__hyper_lookup_cpp;
+  if (const BuiltinType *B = T->getAs<BuiltinType>()) {
+    if (B->getKind() == BuiltinType::Overload)
+      return Builtin::BI__hyper_lookup_c;
   }
-
-  CastKind Cast = CK_BitCast;
-
-  if (const IntegerLiteral *L = dyn_cast<IntegerLiteral>(E)) {
-    if (L->getValue().isZero())
-      return ImplicitCastExpr::Create(Context, Context.VoidPtrTy,
-                                      CK_NullToPointer, E, nullptr, VK_PRValue,
-                                      FPOptionsOverride());
-    Cast = CK_IntegralToPointer;
-  }
-
-  // TODO: The compiler should allow
-  // Ptr = Context.getPointerType(Element)
-  // and generate a thunk that accepts void *.
-
-  QualType Ptr = Context.VoidPtrTy;
-  llvm::SmallVector<QualType, 2> ArgTy;
-  ArgTy.push_back(Ptr);
-  if (NumArgs > 1) {
-    ArgTy.push_back(Ptr);
-    assert(NumArgs == 2);
-  }
-  // FIXME: This code should be dead
-  // TODO: Give these types names for better error messages.
-  QualType FnTy =
-      BuildFunctionType(Context.VoidTy, ArgTy, E->getExprLoc(),
-                        DeclarationName(), FunctionProtoType::ExtProtoInfo());
-  FnTy = BuildPointerType(FnTy, E->getExprLoc(), DeclarationName());
-
-  // Get the ToType from the prototype of the __hyper_lookup builtin.
-  FunctionDecl *HyperLookupDecl;
-  QualType HyperLookupParam;
-  unsigned ParamDeclNum = (NumArgs > 1) ? 3 : 2;
-  {
-    StringRef Name = Context.BuiltinInfo.getName(Builtin::BI__hyper_lookup);
-    LookupResult R(*this, &Context.Idents.get(Name), Loc,
-                   Sema::LookupOrdinaryName);
-    LookupName(R, TUScope, /*AllowBuiltinCreation=*/true);
-
-    HyperLookupDecl = R.getAsSingle<FunctionDecl>();
-    assert(HyperLookupDecl && "failed to find builtin declaration");
-
-    HyperLookupParam = HyperLookupDecl->getParamDecl(ParamDeclNum)->getType();
-  }
-
-  FnTy = HyperLookupParam;
-
-  if (T == Context.OverloadTy) {
-    DeclAccessPair What;
-    bool Multiple = false;
-    if (FunctionDecl *F = ResolveAddressOfOverloadedFunction(E, FnTy, true,
-                                                             What, &Multiple)) {
-      T = F->getType();
-      E = BuildDeclRefExpr(F, T, VK_LValue, E->getExprLoc());
-      T = Context.getPointerType(T);
-      E = ImplicitCastExpr::Create(Context, T, CK_FunctionToPointerDecay, E,
-                                   nullptr, VK_PRValue, FPOptionsOverride());
-    }
-  }
-
-  AssignConvertType Mismatch =
-      CheckAssignmentConstraints(E->getExprLoc(), FnTy, T);
-
-  if (DiagnoseAssignmentResult(Mismatch, E->getExprLoc(), FnTy, T, E,
-                               AA_Passing)) {
-    E = new (Context) CXXNullPtrLiteralExpr(Context.NullPtrTy, E->getExprLoc());
-    Cast = CK_NullToPointer;
-  } else if (Mismatch == IntToPointer) {
-    Cast = CK_IntegralToPointer;
-  } else {
-    // Handle std::function parameter
-    ParmVarDecl *Param = HyperLookupDecl->getParamDecl(ParamDeclNum);
-    InitializedEntity Entity = InitializedEntity::InitializeParameter(
-        Context, Param, HyperLookupParam);
-    ExprResult ArgE = PerformCopyInitialization(Entity, SourceLocation(), E);
-    return ArgE.get();
-  }
-
-  return ImplicitCastExpr::Create(Context, Context.VoidPtrTy, Cast, E, nullptr,
-                                  VK_PRValue, FPOptionsOverride());
+  return 0;
 }
 
-QualType Sema::BuildHyperobjectType(QualType Element, Expr *Identity,
-                                    Expr *Reduce, SourceLocation Loc) {
+std::pair<ParmVarDecl *, ParmVarDecl *>
+Sema::ReducerCallbackParams(unsigned Code, SourceLocation Loc)
+{
+  StringRef Name = Context.BuiltinInfo.getName(Code);
+  LookupResult R(*this, &Context.Idents.get(Name), Loc,
+                 Sema::LookupOrdinaryName);
+  LookupName(R, TUScope, /*AllowBuiltinCreation=*/true);
+
+  FunctionDecl *HyperLookupDecl = R.getAsSingle<FunctionDecl>();
+  assert(HyperLookupDecl && "failed to find builtin declaration");
+
+  return
+    { HyperLookupDecl->getParamDecl(2),
+      HyperLookupDecl->getParamDecl(3) };
+}
+
+// Make the reducer callback match the expected type.
+// This handles ordinary functions and lambdas.
+// An integer 0 or null pointer is converted to a function pointer.
+// Return value is always non-null.
+bool Sema::ValidateReducerCallbacks(Expr *&I, Expr *&R, SourceLocation Loc) {
+  QualType TI = I->getType(), TR = R->getType();
+
+  // If the type is dependent it will be checked again later, if necessary.
+  if (TI->isDependentType() || TR->isDependentType())
+    return true;
+
+  unsigned Builtin = ClassifyReducerCallback(I);
+  if (Builtin == 0) {
+    Diag(I->getExprLoc(), diag::err_invalid_reducer_callback) << 1;
+    return false;
+  }
+  if (Builtin != ClassifyReducerCallback(R)) {
+    Diag(R->getExprLoc(), diag::err_invalid_reducer_callback) << 2;
+    return false;
+  }
+
+  auto [IParm, RParm] = ReducerCallbackParams(Builtin, Loc);
+
+  auto Convert = [this](Expr *E, ParmVarDecl *Param) -> Expr * {
+    QualType Expected = Param->getType();
+    QualType Actual = E->getType();
+    if (Actual->isNullPtrType())
+      return ImplicitCastExpr::Create(Context, Expected, CK_NullToPointer, E,
+                                      nullptr, VK_PRValue,
+                                      FPOptionsOverride());
+    if (Actual->isFunctionType()) {
+      E = ImplicitCastExpr::Create(Context, Context.getPointerType(Actual),
+                                   CK_FunctionToPointerDecay, E, nullptr,
+                                   VK_PRValue, FPOptionsOverride());
+    } else if (Actual == Context.OverloadTy) {
+      DeclAccessPair What;
+      bool Multiple = false;
+      if (FunctionDecl *F =
+          ResolveAddressOfOverloadedFunction(E, Expected, true,
+                                             What, &Multiple)) {
+        QualType T = F->getType();
+        E = BuildDeclRefExpr(F, T, VK_LValue, E->getExprLoc());
+        T = Context.getPointerType(T);
+        E = ImplicitCastExpr::Create(Context, T, CK_FunctionToPointerDecay, E,
+                                     nullptr, VK_PRValue, FPOptionsOverride());
+      }
+    }
+
+    if (Actual->isRecordType()) {
+      // Handle std::function parameter
+      InitializedEntity Entity =
+        InitializedEntity::InitializeParameter(Context, Param);
+      ExprResult ArgE =
+        PerformCopyInitialization(Entity, SourceLocation(), E);
+      E = ArgE.get();
+    }
+
+    Actual = E->getType();
+    AssignConvertType Mismatch =
+      CheckAssignmentConstraints(E->getExprLoc(), Expected, Actual);
+
+    if (DiagnoseAssignmentResult(Mismatch, E->getExprLoc(), Expected,
+                                 Actual, E, AA_Passing)) {
+      auto N =
+        new (Context) CXXNullPtrLiteralExpr(Context.NullPtrTy, E->getExprLoc());
+      E = ImplicitCastExpr::Create(Context, Expected, CK_NullToPointer, N,
+                                   nullptr, VK_PRValue, FPOptionsOverride());
+    }
+    return E;
+  };
+
+  // By this point the callbacks are null pointers (for testing),
+  // functions, pointers, overloads, or records.  Any weird types
+  // were rejected by ClassifyReducerCallback.
+
+  I = Convert(I, IParm);
+  R = Convert(R, RParm);
+  return true;
+}
+
+ExprResult
+Sema::ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
+                            SourceLocation Loc, Expr *Value, bool Perform) {
+  QualType In = Value->getType();
+  assert(!In->isDependentType());
+
+  auto GetCilkType =
+    [this,Loc](Builtin::ID Id, unsigned Arg) -> QualType {
+      StringRef Name = Context.BuiltinInfo.getName(Id);
+      LookupResult R(*this, &Context.Idents.get(Name), Loc,
+                     Sema::LookupOrdinaryName);
+      LookupName(R, TUScope, /*AllowBuiltinCreation=*/true);
+      
+      FunctionDecl *BuiltInDecl = R.getAsSingle<FunctionDecl>();
+      if (!BuiltInDecl) {
+        Diag(Loc, diag::warn_implicit_decl_requires_sysheader)
+          << Context.BuiltinInfo.getHeaderName(Id)
+          << "cilk_reducer";
+        return QualType();
+      }
+      const FunctionProtoType *Type =
+        cast<FunctionProtoType>(BuiltInDecl->getFunctionType());
+      return Type->getParamType(Arg);
+    };
+
+  QualType Expected = GetCilkType(Builtin, Argument);
+  if (Expected.isNull()) {
+    Expected = Context.VoidPtrTy;
+  }
+
+  InitializationKind Kind =
+    InitializationKind::CreateDirect(Loc, Value->getBeginLoc(),
+                                     Value->getEndLoc());
+  InitializedEntity To =
+    InitializedEntity::InitializeParameter(Context, Expected, false);
+  InitializationSequence Seq(*this, To, Kind, { Value }, true, true);
+  Seq.Diagnose(*this, To, Kind, { Value });
+  if (Perform)
+    return Seq.Perform(*this, To, Kind, { Value });
+  return ExprResult();
+}
+
+QualType Sema::BuildHyperobjectType(QualType Element,
+                                    std::optional<Expr *> Callbacks,
+                                    std::optional<Expr *> Identity,
+                                    std::optional<Expr *> Reduce,
+                                    SourceLocation Loc) {
   // This function must return a HyperobjectType with the given
   // element type, otherwise the rest of the front end will get angry.
   // Template instantiation is quite strict about preserving structure.
@@ -2107,22 +2161,45 @@ QualType Sema::BuildHyperobjectType(QualType Element, Expr *Identity,
                            diag::incomplete_hyperobject)) {
     if (std::optional<unsigned> Code = ContainsHyperobject(Element))
       Diag(Loc, *Code) << Element;
+
+    if (!Element->isObjectType())
+      Diag(Loc, diag::confusing_hyperobject) << Element;
+
+    else if (!CurContext->isDependentContext()) {
+      if (Callbacks) {
+        Expr *C = Callbacks.value();
+        QualType Actual = C->getType();
+        if (!Actual->isDependentType()) {
+          ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc, C, false);
+          // TODO: Make S.checkInitializerLifetime do the right thing
+          // in the case of non-lvalue callbacks.
+          if (C->HasSideEffects(Context))
+            Diag(C->getExprLoc(), diag::warn_reducer_callback_side_effects);
+        }
+      } else if (!Identity) {
+        if (!Element->isRecordType() && !Element->isDependentType()) {
+          Diag(Loc, diag::err_view_must_be_class) << Element;
+        } else {
+          Expr *Fake =
+            new (Context) CXXNullPtrLiteralExpr(Context.getPointerType(Element),
+                                                Loc);
+          ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, Fake,
+                                false);
+        }
+      } else {
+        ValidateReducerCallbacks(Identity.value(), Reduce.value(), Loc);
+      }
+    }
+
+    if (Element.isConstQualified() || Element.isVolatileQualified()) {
+      Diag(Loc, diag::qualified_hyperobject) << Element;
+      // Volatile reducers generate confusing diagnostics when used.
+      Element.removeLocalVolatile();
+    }
   }
-
-  if (!Element->isObjectType())
-    Diag(Loc, diag::confusing_hyperobject) << Element;
-
-  if (Element.isConstQualified() || Element.isVolatileQualified()) {
-    Diag(Loc, diag::qualified_hyperobject) << Element;
-    // Volatile reducers generate confusing diagnostics when used.
-    Element.removeLocalVolatile();
-  }
-
-  Identity = ValidateReducerCallback(Identity, 1, Loc);
-  Reduce = ValidateReducerCallback(Reduce, 2, Loc);
 
   // The result will be marked erroneous if Element is incomplete.
-  return Context.getHyperobjectType(Element, Identity, Reduce);
+  return Context.getHyperobjectType(Element, Callbacks, Identity, Reduce);
 }
 
 QualType Sema::BuildReadPipeType(QualType T, SourceLocation Loc) {
@@ -5573,8 +5650,15 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
     }
 
     case DeclaratorChunk::Hyperobject: {
-      T = S.BuildHyperobjectType(T, DeclType.Hyper.Arg[0],
-                                 DeclType.Hyper.Arg[1], DeclType.Loc);
+      std::optional<Expr *> None;
+      if (DeclType.Hyper.Arg[1])
+        T = S.BuildHyperobjectType(T, None, DeclType.Hyper.Arg[0],
+                                   DeclType.Hyper.Arg[1], DeclType.Loc);
+      else if (DeclType.Hyper.Arg[0])
+        T = S.BuildHyperobjectType(T, DeclType.Hyper.Arg[0], None, None,
+                                   DeclType.Loc);
+      else
+        T = S.BuildHyperobjectType(T, None, None, None, DeclType.Loc);
       break;
     }
     }

@@ -12,7 +12,7 @@ void reduce(void* l, void* r) {}
 B _Hyperobject(identity, reduce) b;
 
 template <class T>
-class C { T _Hyperobject *field; };
+class C { T _Hyperobject(identity, reduce) *field; };
 // expected-error@-1{{incomplete type 'D' may not be a hyperobject}}
 
 class D { // expected-note{{}}}

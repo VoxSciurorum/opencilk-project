@@ -4771,8 +4771,30 @@ def ArithmeticFence : LangBuiltin<"ALL_LANGUAGES"> {
 
 // Tapir.  Rewriting of reducer references happens during sema
 // and needs a builtin to carry the information to codegen.
-def HyperLookup : LibBuiltin<"cilk/reducer"> {
-  let Spellings = ["__hyper_lookup"];
+
+// One pointer to leftmost view with polymorphic type.
+def HyperLookupClass : LibBuiltin<"cilk/reducer"> {
+  let Spellings = ["__hyper_lookup_0"];
+  let Attributes = [NoThrow, Pure, IgnoreSignature, RequireDeclaration];
+  let Prototype = "void*(void const*)";
+}
+
+// Leftmost view, size, callback class with polymorphic type.
+def HyperLookupFunctional : LibBuiltin<"cilk/reducer"> {
+  let Spellings = ["__hyper_lookup_1"];
+  let Attributes = [NoThrow, Pure, IgnoreSignature, RequireDeclaration];
+  let Prototype = "void*(void const*, size_t, void *)";
+}
+
+// Leftmost view, size, identity, reduce
+def HyperLookup : Builtin {
+  let Spellings = ["__hyper_lookup_c"];
+  let Attributes = [NoThrow, Pure];
+  let Prototype = "void*(void const*, size_t, 1, 2)";
+}
+
+def HyperLookupLambda : LibBuiltin<"cilk/reducer"> {
+  let Spellings = ["__hyper_lookup_cpp"];
   let Attributes = [NoThrow, Pure, IgnoreSignature, RequireDeclaration];
   let Prototype = "void*(void const*, size_t, void&, void&)";
 }
