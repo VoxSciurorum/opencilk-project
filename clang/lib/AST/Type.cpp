@@ -5124,7 +5124,7 @@ QualType::DestructionKind QualType::isDestructedTypeImpl(QualType type) {
   if (const HyperobjectType *HT = type->getAs<HyperobjectType>()) {
     QualType Inner = HT->getElementType();
     QualType::DestructionKind DK_Inner = isDestructedTypeImpl(Inner);
-    if (DK_Inner != DK_none || HT->hasClassView())
+    if (DK_Inner != DK_none)
       return DK_Inner;
     return DK_hyperobject;
   }
