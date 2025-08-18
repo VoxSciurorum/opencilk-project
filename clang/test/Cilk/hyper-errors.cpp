@@ -109,3 +109,11 @@ template<int I> struct V { int _Hyperobject(I) field = I; };
 
 V<0> v0;
 // expected-note@-1{{in instantiation}}
+
+int l()
+{
+  int cilk_reducer(typo) x;
+  // expected-error@-1{{use of undeclared identifier 'typo'}}
+  return x.field;
+  // The preceding line must not crash the compiler.
+}

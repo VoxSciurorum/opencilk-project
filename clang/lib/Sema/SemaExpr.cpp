@@ -2272,6 +2272,9 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   if (getLangOpts().getCilk() != LangOptions::Cilk_opencilk)
     return E;
 
+  if (E->containsErrors())
+    return E;
+
   QualType InputType = E->getType();
   if (Pointer) {
     const PointerType *PT = InputType->getAs<PointerType>();
