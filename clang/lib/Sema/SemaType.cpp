@@ -2028,7 +2028,9 @@ Sema::ReducerCallbackParams(unsigned Code, SourceLocation Loc)
 // Make the reducer callback match the expected type.
 // This handles ordinary functions and lambdas.
 // An integer 0 or null pointer is converted to a function pointer.
-// Return value is always non-null.
+// Ideally ConvertForHyperobject would replace this path but it
+// appears to be incapable of preventing erroneous C expressions
+// from crashing code gen.
 bool Sema::ValidateReducerCallbacks(Expr *&I, Expr *&R, SourceLocation Loc) {
   QualType TI = I->getType(), TR = R->getType();
 
