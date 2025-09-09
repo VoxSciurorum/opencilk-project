@@ -47,7 +47,6 @@ template<typename View> struct T {
   // expected-error@-1{{qualified type 'const int' may not be a hyperobject}}
   // expected-error@-2{{type 'int _Hyperobject(identity, reduce)', which contains a hyperobject, may not be a hyperobject}}
   // expected-error@-3{{type 'int &' may not be a hyperobject}}
-  // expected-error@-4{{type 'int &' may not be a hyperobject}}
   View &get_view() { return field; }
   // expected-error@-1{{non-const lvalue reference to type 'int' cannot bind to a value of unrelated type '}}
   // The text of the preceding error message is unimportant.
@@ -117,3 +116,11 @@ int l()
   return x.field;
   // The preceding line must not crash the compiler.
 }
+
+struct W : public __reducer_base {
+  D &field; // D contains a hyperobject
+  W();
+};
+
+W _Hyperobject w;
+// expected-error@-1{{type 'W', which contains a hyperobject, may not be a hyperobject}}

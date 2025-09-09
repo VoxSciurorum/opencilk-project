@@ -15,7 +15,9 @@ extern "C" void *__hyper_lookup_0(__reducer_base *)
   __attribute__((nonnull, returns_nonnull));
 
 struct R : public __reducer_base {
+  static int global;
   int field;
+  int &reference = global;
   void identity(void *view) override
     __attribute__((nonnull));
   void reduce(__reducer_base *l, __reducer_base *r) override

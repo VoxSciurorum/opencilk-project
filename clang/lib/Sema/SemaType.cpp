@@ -917,6 +917,10 @@ static std::optional<unsigned> ContainsHyperobject(QualType Outer) {
       return DeclContainsHyperobject(Def);
     return diag::confusing_hyperobject;
   }
+  case Type::LValueReference:
+  case Type::RValueReference:
+    Inner = cast<ReferenceType>(T)->getPointeeType();
+    break;
   case Type::TypeOf:
     Inner = cast<TypeOfType>(T)->getUnmodifiedType();
     break;
@@ -928,15 +932,15 @@ static std::optional<unsigned> ContainsHyperobject(QualType Outer) {
     break;
   case Type::Auto:
   case Type::DeducedTemplateSpecialization:
-    Inner = cast<DeducedType>(T)->desugar();
+    Inner = cast<DeducedType>(T)->getDeducedType();
+    if (Inner.isNull())
+      return std::optional<unsigned>();
     break;
   case Type::TemplateSpecialization:
   case Type::DependentName:
   case Type::DependentTemplateSpecialization:
   case Type::PackExpansion:
   case Type::UnaryTransform:
-  case Type::LValueReference:
-  case Type::RValueReference:
   case Type::BlockPointer:
   case Type::FunctionProto:
   case Type::FunctionNoProto:
