@@ -2004,6 +2004,10 @@ namespace {
     Type *VisitPackExpansionType(const PackExpansionType *T) {
       return Visit(T->getPattern());
     }
+
+    Type *VisitHyperobjectType(const HyperobjectType *T) {
+      return Visit(T->getElementType());
+    }
   };
 
 } // namespace

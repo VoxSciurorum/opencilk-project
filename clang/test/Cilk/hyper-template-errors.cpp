@@ -27,3 +27,16 @@ reducer<reducer<char>> s; // expected-note{{in instantiation}}
 
 template<typename T> struct wrap { T field; };
 reducer<wrap<int _Hyperobject(identity, reduce)>> t; // expected-note{{in instantiation}}
+
+template<typename V> struct T { int a; };
+// expected-note@-1{{previous definition}}
+// expected-note@-2{{t}}
+// expected-note@-3{{t}}
+// expected-note@-4{{t}}
+// expected-note@-5{{t}}
+struct T { int b; };
+// expected-error@-1{{redefinition of 'T' as different kind of symbol}}
+// This tests for a crash trying to deduce the view type T of the hyperobject.
+T cilk_reducer(identity, reduce) t;
+// expected-error@-1{{deduced class template specialization type}}
+// expected-error@-2{{deduction of template arguments}}
