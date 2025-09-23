@@ -14655,8 +14655,7 @@ void Sema::FinalizeDeclaration(Decl *ThisDecl) {
   // This is only a shallow search.  See also SemaType.cpp ContainsHyperobject.
   if (VD->getType()->isArrayType()) {
     const ArrayType *A = VD->getType()->getAsArrayTypeUnsafe();
-    const HyperobjectType *H = A->getElementType()->getAs<HyperobjectType>();
-    if (H && H->hasCallbacks())
+    if (A->getElementType()->isHyperobjectType())
       Diag(VD->getLocation(), diag::no_reducer_array);
   }
 
@@ -18899,7 +18898,7 @@ void Sema::ActOnFields(Scope *S, SourceLocation RecLoc, Decl *EnclosingDecl,
     // In C++ a constructor and destructor will be synthesized
     // to register hyperobjects.
     if (!CXXRecord && !FDTy->isDependentType()) {
-      if (const HyperobjectType *HT = FDTy->getAs<HyperobjectType>()) {
+      if (FDTy->isHyperobjectType()) {
         Diag(FD->getLocation(), diag::reducer_registration_not_implemented)
           << FD->getDeclName();
       }

@@ -36,6 +36,10 @@ class TaskInfo;
 bool isTapirIntrinsic(Intrinsic::ID ID, const Instruction *I,
                       const Value *V = nullptr);
 
+// Check if the given instruction is one of the hyperobject view
+// lookup intrinsics.
+bool isTapirHyperobjectIntrinsic(const Instruction *I);
+
 /// Returns true if the given instruction performs a detached.rethrow, false
 /// otherwise.  If \p SyncRegion is specified, then additionally checks that the
 /// detached.rethrow uses \p SyncRegion.

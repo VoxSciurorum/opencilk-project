@@ -1,14 +1,28 @@
 // RUN: %clang_cc1 %s -fopencilk -verify -fsyntax-only -Werror=incompatible-function-pointer-types -Werror=int-conversion
-struct C { int _Hyperobject c; };
+
+extern int integer;
+extern void identity(void *), reduce(void *, void *);
+
+// Test for crash on integer variable, not literal 0, used as callback.
+int cilk_reducer(integer, 0) noint;
+//expected-error@-1{{reducer callback must be function with 1 pointer parameter}}
+
+int cilk_reducer needclass;
+// expected-error@-1{{view type must be a class when hyperobject has no callbacks}}
+
+struct C { int _Hyperobject(identity, reduce) c; };
 // expected-warning@-1{{reducer registration not implemented for structure members}}
-struct C _Hyperobject c; // expected-error{{type 'struct C', which contains a hyperobject, may not be a hyperobject}}
-long _Hyperobject d; // expected-note{{previous definition}}
+// expected-note@-2{{unsupported type}}
+struct C _Hyperobject(identity, reduce) c;
+// expected-error@-1{{view type 'struct C' contains a hyperobject}}
+
+long _Hyperobject(identity, reduce) d; // expected-note{{previous definition}}
 void f() {
-  extern int _Hyperobject d;
-  // expected-error@-1{{redeclaration of 'd' with a different type: 'int _Hyperobject' vs 'long _Hyperobject'}}
+  extern int _Hyperobject(identity, reduce) d;
+  // expected-error@-1{{redeclaration of 'd' with a different type: 'int _Hyperobject(identity, reduce)' vs 'long _Hyperobject(identity, reduce)'}}
 }
-char _Hyperobject e; // expected-note{{previous definition}}
-typedef long _Hyperobject long_h;
+char _Hyperobject(identity, reduce) e; // expected-note{{previous definition}}
+typedef long _Hyperobject(identity, reduce) long_h;
 void g() {
   extern long_h e; // expected-error{{redeclaration of 'e'}}
 }
@@ -24,10 +38,13 @@ int _Hyperobject(reduce, identity) h;
   // expected-error@-1{{incompatible function pointer types passing 'void (*)(void *, void *)' to parameter of type 'void (*)(void *)'}}
   // expected-error@-2{{incompatible function pointer types passing 'void (*)(void *)' to parameter of type 'void (*)(void *, void *)'}}
 
-int _Hyperobject(x) i; // expected-error{{use of undeclared identifier 'x'}}
-int _Hyperobject(0) j; // expected-error{{hyperobject must have 0 or 2 callbacks}}
-int _Hyperobject(0,0,0,0) k; // expected-error{{hyperobject must have 0 or 2 callbacks}}
-int _Hyperobject(0, 1) x; // expected-error{{incompatible integer to pointer conversion passing 'int' to parameter of type 'void (*)(void *, void *)'}}
+int _Hyperobject(x) i;
+// expected-error@-1{{use of undeclared identifier 'x'}}
+int _Hyperobject(0,0,0,0) k;
+// expected-error@-1{{extra hyperobject callbacks ignored}}
+// expected-error@-2{{reducer callback must be function with 1 pointer parameter}}
+int _Hyperobject(0, 1) x;
+// expected-error@-1{{reducer callback must be function with 1 pointer parameter}}
 
 void function() {
   int _Hyperobject(typo1, reduce) var1 = 0;
@@ -50,3 +67,8 @@ void function() {
   ++var6;
   // expected-error@-1{{read-only variable is not assignable}}
 }
+
+void _Hyperobject(identity, reduce) v;
+// expected-error@-1{{hyperobject has incomplete view type 'void'}}
+//typedef int empty[0];
+//empty _Hyperobject(identity, reduce) ee;
