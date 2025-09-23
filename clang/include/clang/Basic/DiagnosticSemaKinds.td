@@ -11695,20 +11695,21 @@ def attribute_requires_cilk : Warning<
   "%0 ignored when OpenCilk not in use">,
   InGroup<DiagGroup<"required-cilk">>;
 
-def variable_length_hyperobject : Error<
-   "variable length type %0 may not be a hyperobject">;
-
-def confusing_hyperobject : Error<
-   "type %0 may not be a hyperobject">;
-
 def incomplete_hyperobject : Error<
-   "incomplete type %0 may not be a hyperobject">;
+   "hyperobject has %select{incomplete|sizeless}0 view type %1"
+>;
 
-def qualified_hyperobject : Error<
-   "qualified type %0 may not be a hyperobject">;
+def unsupported_hyperobject : Error<
+   "%select{variable length|qualified|function|objective C|unexpected|non-object}0 type %1 may not be a hyperobject"
+>;
+
+def unsupported_hyperobject_note : Note<
+   "unsupported type %0 here"
+>;
 
 def nested_hyperobject : Error<
-   "type %0, which contains a hyperobject, may not be a hyperobject">;
+   "view type %0 %select{contains|is}1 a hyperobject"
+>;
 
 def reducer_registration_not_implemented: Warning<
    "reducer registration not implemented for structure members">,
@@ -11716,6 +11717,22 @@ def reducer_registration_not_implemented: Warning<
 
 def err_invalid_reducer_callback : Error<
   "reducer callback must be function with %0 pointer parameter%s0"
+>;
+
+def err_non_lvalue_reducer_callback : Error<
+  "reducer callback must be an lvalue"
+>;
+
+def warn_reducer_callback_side_effects : Warning<
+  "reducer callback has side effects"
+>;
+
+def err_view_must_be_class : Error<
+  "view type must be a class when hyperobject has no callbacks"
+>;
+
+def err_callbacks_must_be_class : Error<
+  "hyperobject callback must be a class"
 >;
 
 def note_protected_by_reducer : Note<

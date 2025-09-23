@@ -2379,6 +2379,10 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   if (getLangOpts().getCilk() != LangOptions::Cilk_opencilk)
     return E;
 
+  // Error or not yet completed type.
+  if (E->getDependence() != ExprDependence::None)
+    return E;
+
   QualType InputType = E->getType();
   if (Pointer) {
     const PointerType *PT = InputType->getAs<PointerType>();
@@ -2408,7 +2412,12 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
 
   Expr *VarAddr;
   if (Pointer) {
-    VarAddr = E;
+    // Strip off the hyperobject wrapper here.  A derived to base
+    // cast may follow in the hyper_lookup_0 case.
+    ExprResult Converted =
+      ImpCastExprToType(E, Ptr, CK_BitCast, VK_PRValue);
+    assert(Converted.isUsable());
+    VarAddr = Converted.get();
   } else if (HT->getElementType()->isDependentType()) {
     ExprResult Address =
       BuildBuiltinCallExpr(Loc, Builtin::BI__builtin_addressof, E);
@@ -2419,10 +2428,66 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
                                     OK_Ordinary, SourceLocation(), false,
                                     CurFPFeatureOverrides());
   }
-  Expr *CallArgs[] = {VarAddr, SizeExpr.get(), HT->getIdentity(),
-                      HT->getReduce()};
-  ExprResult Call =
-      BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup, CallArgs);
+
+  // Three lookup methods:
+  // 1. If the identity and reduce callbacks are omitted and the
+  // view type can be passed to the C++ lookup method, call it.
+  // BuildResolvedCallExpr?
+  // 2. If the identity and reduce callbacks are both scalar
+  // (including null), call the C lookup method.
+  // 3. Otherwise, call the functional lookup method.
+
+  Expr *Call = nullptr;
+  if (HT->getCallbacks()) {
+    ExprResult Callbacks =
+      ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc,
+                            HT->getCallbacks().value(), true);
+    assert(!Callbacks.isInvalid());
+    Expr *CallArgs[] = {VarAddr, Callbacks.get()};
+    Call =
+      BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup_1, CallArgs, true);
+    if (!Call)
+      Call = VarAddr;
+  }
+  else if (HT->getIdentity()) {
+    Expr *Identity = HT->getIdentity().value();
+    Expr *Reduce = HT->getReduce().value();
+
+    // TODO: Coerce type if necessary.
+#if 0
+    if (Identity->getType() != Context.VoidPtrTy)
+      Identity =
+        ImplicitCastExpr::Create(Context, Context.VoidPtrTy, CK_BitCast,
+                                 Identity, nullptr, VK_PRValue,
+                                 CurFPFeatureOverrides());
+#endif
+
+    // TODO: The types embedded in the Hyperobject type may have to change.
+
+    // TODO: Select C or C++ interface based on type.
+    // If the arguments look like lambdas, or not like functions,
+    // use the C++ hyper_lookup.
+    // How about if the view type has identity and reduce methods?
+    // See BuildNonArrayForRange.
+    // Check to see if a pointer to the view type can be passed
+    // as an argument to the C++ hyperobject lookup function.
+    // The parameter type will be a class with identity and reduce methods.
+
+    Expr *CallArgs[] = {VarAddr, SizeExpr.get(), Identity, Reduce};
+    Call =
+      BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup_c, CallArgs, true);
+    // TODO: C++
+    if (!Call)
+      Call = VarAddr;
+  } else {
+    ExprResult Converted =
+      ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, VarAddr, true);
+    Expr *CallArgs[] = { Converted.isInvalid() ? VarAddr : Converted.get() };
+    Call =
+      BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup_0, CallArgs, true);
+    if (!Call)
+      Call = VarAddr;
+  }
 
   // Template expansion normally strips out implicit casts, so make this
   // explicit in C++.
@@ -2431,12 +2496,12 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
     // Based on logic in CoroutineStmtBuilder::makeNewAndDeleteExpr()
     Casted =
         BuildCXXNamedCast(Loc, tok::kw_static_cast,
-                          Context.getTrivialTypeSourceInfo(Ptr), Call.get(),
+                          Context.getTrivialTypeSourceInfo(Ptr), Call,
                           SourceRange(Loc, Loc), SourceRange(Loc, Loc))
             .get();
   else
     Casted =
-        ImplicitCastExpr::Create(Context, Ptr, CK_BitCast, Call.get(), nullptr,
+        ImplicitCastExpr::Create(Context, Ptr, CK_BitCast, Call, nullptr,
                                  VK_PRValue, CurFPFeatureOverrides());
 
   if (Pointer)
@@ -6888,14 +6953,20 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
 }
 
 Expr *Sema::BuildBuiltinCallExpr(SourceLocation Loc, Builtin::ID Id,
-                                 MultiExprArg CallArgs) {
+                                 MultiExprArg CallArgs, bool FailOK) {
   std::string Name = Context.BuiltinInfo.getName(Id);
   LookupResult R(*this, &Context.Idents.get(Name), Loc,
                  Sema::LookupOrdinaryName);
   LookupName(R, TUScope, /*AllowBuiltinCreation=*/true);
 
   auto *BuiltInDecl = R.getAsSingle<FunctionDecl>();
-  assert(BuiltInDecl && "failed to find builtin declaration");
+  if (!BuiltInDecl) {
+    Diag(Loc, diag::warn_implicit_decl_requires_sysheader)
+        << Context.BuiltinInfo.getHeaderName(Id)
+        << Context.BuiltinInfo.getName(Id);
+    assert(FailOK);
+    return nullptr;
+  }
 
   ExprResult DeclRef =
       BuildDeclRefExpr(BuiltInDecl, BuiltInDecl->getType(), VK_LValue, Loc);
@@ -6904,6 +6975,8 @@ Expr *Sema::BuildBuiltinCallExpr(SourceLocation Loc, Builtin::ID Id,
   ExprResult Call =
       BuildCallExpr(/*Scope=*/nullptr, DeclRef.get(), Loc, CallArgs, Loc);
 
+  if (FailOK && Call.isInvalid())
+    return nullptr;
   assert(!Call.isInvalid() && "Call to builtin cannot fail!");
   return Call.get();
 }

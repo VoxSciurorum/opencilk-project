@@ -6446,11 +6446,11 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
     ParseTypeQualifierListOpt(DS, AR_GNUAttributesParsedAndRejected, true,
                               !D.mayOmitIdentifier());
 
-    Expr *Reduce = nullptr, *Identity = nullptr;
+    Expr *Arg1 = nullptr, *Arg2 = nullptr;
     if (Tok.is(tok::l_paren)) {
-      SourceLocation Open = ConsumeParen(); // Eat the parenthesis
+      (void) ConsumeParen(); // Eat the parenthesis
       SmallVector<Expr *, 3> Args;
-      bool Reported = false, Error = false;
+      bool Reported = false;
       SourceLocation Close = Tok.getLocation();
 
       if (!Tok.is(tok::r_paren))
@@ -6472,17 +6472,20 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
       switch (Args.size()) {
       case 0:
         break;
-      case 2:
-        Identity = Args[0];
-        Reduce = Args[1];
+      case 1:
+        Arg1 = Args[0];
         break;
       default:
-        Error = true;
+        if (!Reported)
+          Diag(Loc, diag::error_hyperobject_arguments)
+            << SourceRange(Args[2]->getExprLoc(),
+                           Args[Args.size() - 1]->getExprLoc());
+        [[fallthrough]];
+      case 2:
+        Arg1 = Args[0];
+        Arg2 = Args[1];
         break;
       }
-      if (Error && !Reported)
-        Diag(Loc, diag::error_hyperobject_arguments)
-            << SourceRange(Open, Close);
     }
 
     D.ExtendWithDeclSpec(DS);
@@ -6492,7 +6495,7 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
     if (getLangOpts().getCilk() == LangOptions::Cilk_opencilk)
       D.AddTypeInfo(DeclaratorChunk::getHyperobject(
                         DS.getTypeQualifiers(), Loc, SourceLocation(),
-                        SourceLocation(), Identity, Reduce),
+                        SourceLocation(), Arg1, Arg2),
                     std::move(DS.getAttributes()), SourceLocation());
     else
       Diag(Loc, diag::attribute_requires_cilk) << Kind;

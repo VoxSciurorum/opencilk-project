@@ -7181,8 +7181,13 @@ public:
                    SourceLocation TemplateKWLoc = SourceLocation(),
                    const TemplateArgumentListInfo *TemplateArgs = nullptr);
 
+  ExprResult
+  ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
+                        SourceLocation Loc, Expr *Value, bool Perform);
   Expr *BuildHyperobjectLookup(Expr *, bool Pointer = false);
-  Expr *ValidateReducerCallback(Expr *E, unsigned NumArgs, SourceLocation Loc);
+  std::pair<ParmVarDecl *, ParmVarDecl*>
+  ReducerCallbackParams(unsigned Code, SourceLocation Loc);
+  bool ValidateReducerCallbacks(Expr *&I, Expr *&r, SourceLocation Loc);
 
   bool UseArgumentDependentLookup(const CXXScopeSpec &SS, const LookupResult &R,
                                   bool HasTrailingLParen);
@@ -7410,7 +7415,7 @@ public:
   /// BuildBuiltinCallExpr - Create a call to a builtin function specified by Id
   //  with the specified CallArgs
   Expr *BuildBuiltinCallExpr(SourceLocation Loc, Builtin::ID Id,
-                             MultiExprArg CallArgs);
+                             MultiExprArg CallArgs, bool FailOK = false);
 
   using ADLCallKind = CallExpr::ADLCallKind;
 
@@ -14977,7 +14982,10 @@ public:
                               SourceLocation AttrLoc);
   QualType BuildMatrixType(QualType T, Expr *NumRows, Expr *NumColumns,
                            SourceLocation AttrLoc);
-  QualType BuildHyperobjectType(QualType Element, Expr *Identity, Expr *Reduce,
+  QualType BuildHyperobjectType(QualType Element,
+                                std::optional<Expr *> Callbacks,
+                                std::optional<Expr *> Identity,
+                                std::optional<Expr *> Reduce,
                                 SourceLocation Loc);
 
   QualType BuildCountAttributedArrayOrPointerType(QualType WrappedTy,
