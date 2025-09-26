@@ -2190,6 +2190,10 @@ Sema::ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
     InitializedEntity::InitializeParameter(Context, Expected, false);
   InitializationSequence Seq(*this, To, Kind, { Value }, true, true);
   Seq.Diagnose(*this, To, Kind, { Value });
+  // TODO: Perform will report an error when a class view
+  // type is not convertible to the base class.  The error
+  // should be diagnosed when the type is declared.  Perform
+  // may not be called then because it has side effects.
   if (Perform)
     return Seq.Perform(*this, To, Kind, { Value });
   return ExprResult(Seq.Failed());

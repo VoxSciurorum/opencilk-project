@@ -131,3 +131,12 @@ struct W : public __reducer_base {
 
 W _Hyperobject w;
 // expected-error@-1{{view type 'W' contains a hyperobject}}
+
+struct Z : private __reducer_base { int value; };
+// expected-note@-1{{declared private}}
+
+Z cilk_reducer z;
+// Unfortunately, no error on variable definition.
+int get_z() { return z.value; }
+// expected-error@-1{{private base class}}
+// The error is only on use.
