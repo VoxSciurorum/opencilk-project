@@ -2318,7 +2318,7 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
     VarAddr = Address.get();
   } else {
     VarAddr = UnaryOperator::Create(Context, E, UO_AddrOf, Ptr, VK_PRValue,
-                                    OK_Ordinary, SourceLocation(), false,
+                                    OK_Ordinary, E->getExprLoc(), false,
                                     CurFPFeatureOverrides());
   }
 
@@ -2375,9 +2375,11 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   } else {
     ExprResult Converted =
       ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, VarAddr, true);
-    Expr *CallArgs[] = { Converted.isInvalid() ? VarAddr : Converted.get() };
-    Call =
-      BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup_0, CallArgs, true);
+    if (!Converted.isInvalid()) {
+      Expr *CallArgs[] = { Converted.get() };
+      Call =
+        BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup_0, CallArgs, true);
+    }
     if (!Call)
       Call = VarAddr;
   }
