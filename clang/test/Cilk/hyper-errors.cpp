@@ -38,12 +38,23 @@ int _Hyperobject(reduce, identity) h;
 
 int _Hyperobject(x) i;
 // expected-error@-1{{use of undeclared identifier 'x'}}
+int get_i() { return i; }
+// No additional error on reference to j.
+
 int _Hyperobject(0) j;
 // expected-error@-1{{reference to type 'const __reducer_callbacks' could not bind to an rvalue of type 'int'}}
+int get_j() { return j; }
+// No additional error on reference to j.
+
 int _Hyperobject(0,0,0,0) k;
 // expected-error@-1{{extra hyperobject callbacks ignored}}
 // expected-error@-2{{reducer callback must be function with 1 pointer parameter}}
-int _Hyperobject(0,1) x; // expected-error{{reducer callback must be function with 1 pointer parameter}}
+int get_k() { return k; }
+// No additional error on reference to k.
+
+int _Hyperobject(0,1) x;
+// expected-error@-1{{reducer callback must be function with 1 pointer parameter}}
+// TODO: int get_x() { return x; }
 
 template<typename View> struct T {
   static void identity(void *), reduce(void *, void *);
@@ -132,10 +143,10 @@ W _Hyperobject w;
 // expected-error@-1{{view type 'W' contains a hyperobject}}
 
 struct Z : private __reducer_base { int value; };
-// expected-note@-1{{declared private}}
+// expected-note@-1{{declared private}} (one for the type definition)
+// expected-note@-2{{declared private}} (one for the type use)
 
 Z cilk_reducer z;
-// Unfortunately, no error on variable definition.
+// expected-error@-1{{private base class}}
 int get_z() { return z.value; }
 // expected-error@-1{{private base class}}
-// The error is only on use.
