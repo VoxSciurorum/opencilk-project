@@ -2189,14 +2189,15 @@ Sema::ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
   InitializedEntity To =
     InitializedEntity::InitializeParameter(Context, Expected, false);
   InitializationSequence Seq(*this, To, Kind, { Value }, true, true);
-  Seq.Diagnose(*this, To, Kind, { Value });
-  // TODO: Perform will report an error when a class view
-  // type is not convertible to the base class.  The error
-  // should be diagnosed when the type is declared.  Perform
-  // may not be called then because it has side effects.
-  if (Perform)
-    return Seq.Perform(*this, To, Kind, { Value });
-  return ExprResult(Seq.Failed());
+  if (!Perform)
+    PushExpressionEvaluationContext
+      (ExpressionEvaluationContext::Unevaluated,
+       nullptr,
+       ExpressionEvaluationContextRecord::EK_Other);
+  ExprResult Result = Seq.Perform(*this, To, Kind, { Value });
+  if (!Perform)
+    PopExpressionEvaluationContext();
+  return Result;
 }
 
 QualType Sema::BuildHyperobjectType(QualType Element,
@@ -2237,11 +2238,17 @@ QualType Sema::BuildHyperobjectType(QualType Element,
         Expr *C = Callbacks.value();
         QualType Actual = C->getType();
         if (!Actual->isDependentType()) {
-          ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc, C, false);
+          ExprResult Converted =
+            ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc,
+                                  C, false);
+          if (Converted.isInvalid())
+            Callbacks =
+              RecoveryExpr::Create(Context, Actual, C->getBeginLoc(),
+                                   C->getEndLoc(), { C });
+          else if (C->HasSideEffects(Context))
+            Diag(C->getExprLoc(), diag::warn_reducer_callback_side_effects);
           // TODO: Make S.checkInitializerLifetime do the right thing
           // in the case of non-lvalue callbacks.
-          if (C->HasSideEffects(Context))
-            Diag(C->getExprLoc(), diag::warn_reducer_callback_side_effects);
         }
       } else if (!Identity) {
         if (!Element->isRecordType() && !Element->isDependentType()) {
@@ -2252,6 +2259,8 @@ QualType Sema::BuildHyperobjectType(QualType Element,
                                                 Loc);
           ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, Fake,
                                 false);
+          // TODO: To avoid cascading errors if ConvertForHyperobject fails
+          // the hyperobject should be marked as containing an error.
         }
       } else {
         ValidateReducerCallbacks(Identity.value(), Reduce.value(), Loc);
