@@ -2014,125 +2014,10 @@ QualType Sema::BuildReferenceType(QualType T, bool SpelledAsLValue,
   return Context.getRValueReferenceType(T);
 }
 
-static unsigned ClassifyReducerCallback(Expr *C)
-{
-  QualType T = C->getType();
-  if (T->isFunctionType())
-    return Builtin::BI__hyper_lookup_c;
-  if (T->isPointerType())
-    return Builtin::BI__hyper_lookup_c;
-  if (T->isNullPtrType())
-    return Builtin::BI__hyper_lookup_c;
-  if (T->isRecordType())
-    return Builtin::BI__hyper_lookup_cpp;
-  if (const BuiltinType *B = T->getAs<BuiltinType>()) {
-    if (B->getKind() == BuiltinType::Overload)
-      return Builtin::BI__hyper_lookup_c;
-  }
-  return 0;
-}
-
-std::pair<ParmVarDecl *, ParmVarDecl *>
-Sema::ReducerCallbackParams(unsigned Code, SourceLocation Loc)
-{
-  StringRef Name = Context.BuiltinInfo.getName(Code);
-  LookupResult R(*this, &Context.Idents.get(Name), Loc,
-                 Sema::LookupOrdinaryName);
-  LookupName(R, TUScope, /*AllowBuiltinCreation=*/true);
-
-  FunctionDecl *HyperLookupDecl = R.getAsSingle<FunctionDecl>();
-  assert(HyperLookupDecl && "failed to find builtin declaration");
-
-  return
-    { HyperLookupDecl->getParamDecl(2),
-      HyperLookupDecl->getParamDecl(3) };
-}
-
-// Make the reducer callback match the expected type.
-// This handles ordinary functions and lambdas.
-// An integer 0 or null pointer is converted to a function pointer.
-// Ideally ConvertForHyperobject would replace this path but it
-// appears to be incapable of preventing erroneous C expressions
-// from crashing code gen.
-bool Sema::ValidateReducerCallbacks(Expr *&I, Expr *&R, SourceLocation Loc) {
-  QualType TI = I->getType(), TR = R->getType();
-
-  // If the type is dependent it will be checked again later, if necessary.
-  if (TI->isDependentType() || TR->isDependentType())
-    return true;
-
-  unsigned Builtin = ClassifyReducerCallback(I);
-  if (Builtin == 0) {
-    Diag(I->getExprLoc(), diag::err_invalid_reducer_callback) << 1;
-    return false;
-  }
-  if (Builtin != ClassifyReducerCallback(R)) {
-    Diag(R->getExprLoc(), diag::err_invalid_reducer_callback) << 2;
-    return false;
-  }
-
-  auto [IParm, RParm] = ReducerCallbackParams(Builtin, Loc);
-
-  auto Convert = [this](Expr *E, ParmVarDecl *Param) -> Expr * {
-    QualType Expected = Param->getType();
-    QualType Actual = E->getType();
-    if (Actual->isNullPtrType())
-      return ImplicitCastExpr::Create(Context, Expected, CK_NullToPointer, E,
-                                      nullptr, VK_PRValue,
-                                      FPOptionsOverride());
-    if (Actual->isFunctionType()) {
-      E = ImplicitCastExpr::Create(Context, Context.getPointerType(Actual),
-                                   CK_FunctionToPointerDecay, E, nullptr,
-                                   VK_PRValue, FPOptionsOverride());
-    } else if (Actual == Context.OverloadTy) {
-      DeclAccessPair What;
-      bool Multiple = false;
-      if (FunctionDecl *F =
-          ResolveAddressOfOverloadedFunction(E, Expected, true,
-                                             What, &Multiple)) {
-        QualType T = F->getType();
-        E = BuildDeclRefExpr(F, T, VK_LValue, E->getExprLoc());
-        T = Context.getPointerType(T);
-        E = ImplicitCastExpr::Create(Context, T, CK_FunctionToPointerDecay, E,
-                                     nullptr, VK_PRValue, FPOptionsOverride());
-      }
-    }
-
-    if (Actual->isRecordType()) {
-      // Handle std::function parameter
-      InitializedEntity Entity =
-        InitializedEntity::InitializeParameter(Context, Param);
-      ExprResult ArgE =
-        PerformCopyInitialization(Entity, SourceLocation(), E);
-      E = ArgE.get();
-    }
-
-    Actual = E->getType();
-    AssignConvertType Mismatch =
-      CheckAssignmentConstraints(E->getExprLoc(), Expected, Actual);
-
-    if (DiagnoseAssignmentResult(Mismatch, E->getExprLoc(), Expected,
-                                 Actual, E, AA_Passing)) {
-      auto N =
-        new (Context) CXXNullPtrLiteralExpr(Context.NullPtrTy, E->getExprLoc());
-      E = ImplicitCastExpr::Create(Context, Expected, CK_NullToPointer, N,
-                                   nullptr, VK_PRValue, FPOptionsOverride());
-    }
-    return E;
-  };
-
-  // By this point the callbacks are null pointers (for testing),
-  // functions, pointers, overloads, or records.  Any weird types
-  // were rejected by ClassifyReducerCallback.
-
-  I = Convert(I, IParm);
-  R = Convert(R, RParm);
-  return true;
-}
-
 ExprResult
 Sema::ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
-                            SourceLocation Loc, Expr *Value, bool Perform) {
+                            SourceLocation Loc, Expr *Value,
+                            bool Perform, bool Warn) {
   QualType In = Value->getType();
   if (In->isDependentType())
     return ExprResult(false);
@@ -2174,6 +2059,12 @@ Sema::ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
   ExprResult Result = Seq.Perform(*this, To, Kind, { Value });
   if (!Perform)
     PopExpressionEvaluationContext();
+  if (Expr *R = Result.get()) {
+    if (Warn && !isUnevaluatedContext() && !Seq.Failed() &&
+        R->getDependence() == ExprDependence::None &&
+        R->HasSideEffects(Context))
+      Diag(Value->getBeginLoc(), diag::warn_reducer_callback_side_effects);
+  }
   return Result;
 }
 
@@ -2217,13 +2108,11 @@ QualType Sema::BuildHyperobjectType(QualType Element,
         if (!Actual->isDependentType()) {
           ExprResult Converted =
             ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc,
-                                  C, false);
+                                  C, false, true);
           if (Converted.isInvalid())
             Callbacks =
               RecoveryExpr::Create(Context, Actual, C->getBeginLoc(),
                                    C->getEndLoc(), { C });
-          else if (C->HasSideEffects(Context))
-            Diag(C->getExprLoc(), diag::warn_reducer_callback_side_effects);
           // TODO: Make S.checkInitializerLifetime do the right thing
           // in the case of non-lvalue callbacks.
         }
@@ -2235,12 +2124,37 @@ QualType Sema::BuildHyperobjectType(QualType Element,
             new (Context) CXXNullPtrLiteralExpr(Context.getPointerType(Element),
                                                 Loc);
           ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, Fake,
-                                false);
+                                false, false);
           // TODO: To avoid cascading errors if ConvertForHyperobject fails
           // the hyperobject should be marked as containing an error.
         }
       } else {
-        ValidateReducerCallbacks(Identity.value(), Reduce.value(), Loc);
+        // In the C case, the conversion must always be performed so
+        // functions are properly uniqued and converted to pointers.
+        Expr *I = *Identity, *R = *Reduce;
+        Expr *I2 = nullptr, *R2 = nullptr;
+
+        ExprResult Converted1 =
+          ConvertForHyperobject(Builtin::BI__hyper_lookup_c, 2, Loc, I,
+                                true, true);
+        if (Converted1.isInvalid()) {
+          Identity = RecoveryExpr::Create(Context, Context.VoidPtrTy,
+                                          I->getBeginLoc(), I->getEndLoc(),
+                                          { I });
+        } else if ((I2 = Converted1.get())) {
+          Identity = I2;
+        }
+
+        ExprResult Converted2 =
+          ConvertForHyperobject(Builtin::BI__hyper_lookup_c, 3, Loc, R,
+                                true, true);
+        if (Converted2.isInvalid()) {
+          Reduce = RecoveryExpr::Create(Context, Context.VoidPtrTy,
+                                        R->getBeginLoc(), R->getEndLoc(),
+                                        { R });
+        } else if ((R2 = Converted2.get())) {
+          Reduce = R2;
+        }
       }
     }
 

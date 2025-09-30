@@ -4792,9 +4792,3 @@ def HyperLookup : Builtin {
   let Attributes = [NoThrow, Pure];
   let Prototype = "void*(void const*, size_t, 1, 2)";
 }
-
-def HyperLookupLambda : LibBuiltin<"cilk/reducer"> {
-  let Spellings = ["__hyper_lookup_cpp"];
-  let Attributes = [NoThrow, Pure, IgnoreSignature, RequireDeclaration];
-  let Prototype = "void*(void const*, size_t, void&, void&)";
-}
