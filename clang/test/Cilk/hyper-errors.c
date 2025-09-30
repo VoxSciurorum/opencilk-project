@@ -5,7 +5,7 @@ extern void identity(void *), reduce(void *, void *);
 
 // Test for crash on integer variable, not literal 0, used as callback.
 int cilk_reducer(integer, 0) noint;
-//expected-error@-1{{reducer callback must be function with 1 pointer parameter}}
+//expected-error@-1{{incompatible integer to pointer conversion passing 'int' to parameter of type 'void (*)(void *)'}}
 
 int cilk_reducer needclass;
 // expected-error@-1{{view type must be a class when hyperobject has no callbacks}}
@@ -35,16 +35,15 @@ struct D {
 };
 
 int _Hyperobject(reduce, identity) h;
-  // expected-error@-1{{incompatible function pointer types passing 'void (*)(void *, void *)' to parameter of type 'void (*)(void *)'}}
-  // expected-error@-2{{incompatible function pointer types passing 'void (*)(void *)' to parameter of type 'void (*)(void *, void *)'}}
+  // expected-error@-1{{incompatible function pointer types passing 'void (void *, void *)' to parameter of type 'void (*)(void *)'}}
+  // expected-error@-2{{incompatible function pointer types passing 'void (void *)' to parameter of type 'void (*)(void *, void *)'}}
 
 int _Hyperobject(x) i;
 // expected-error@-1{{use of undeclared identifier 'x'}}
 int _Hyperobject(0,0,0,0) k;
 // expected-error@-1{{extra hyperobject callbacks ignored}}
-// expected-error@-2{{reducer callback must be function with 1 pointer parameter}}
 int _Hyperobject(0, 1) x;
-// expected-error@-1{{reducer callback must be function with 1 pointer parameter}}
+// expected-error@-1{{incompatible integer to pointer conversion passing 'int' to parameter of type 'void (*)(void *, void *)'}}
 
 void function() {
   int _Hyperobject(typo1, reduce) var1 = 0;

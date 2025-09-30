@@ -33,8 +33,8 @@ struct D {
 };
 
 int _Hyperobject(reduce, identity) h;
-  // expected-error@-1{{incompatible function pointer types passing 'void (*)(void *, void *)' to parameter of type 'void (*)(void *)'}}
-  // expected-error@-2{{incompatible function pointer types passing 'void (*)(void *)' to parameter of type 'void (*)(void *, void *)'}}
+// expected-error@-1{{different number of parameters (1 vs 2)}}
+// expected-error@-2{{different number of parameters (2 vs 1)}}
 
 int _Hyperobject(x) i;
 // expected-error@-1{{use of undeclared identifier 'x'}}
@@ -48,12 +48,12 @@ int get_j() { return j; }
 
 int _Hyperobject(0,0,0,0) k;
 // expected-error@-1{{extra hyperobject callbacks ignored}}
-// expected-error@-2{{reducer callback must be function with 1 pointer parameter}}
+
 int get_k() { return k; }
 // No additional error on reference to k.
 
 int _Hyperobject(0,1) x;
-// expected-error@-1{{reducer callback must be function with 1 pointer parameter}}
+// expected-error@-1{{cannot initialize a parameter of type 'void (*)(void *, void *)' with an rvalue of type 'int'}}
 // TODO: int get_x() { return x; }
 
 template<typename View> struct T {

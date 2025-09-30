@@ -7183,11 +7183,9 @@ public:
 
   ExprResult
   ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
-                        SourceLocation Loc, Expr *Value, bool Perform);
+                        SourceLocation Loc, Expr *Value,
+                        bool Perform, bool Warn);
   Expr *BuildHyperobjectLookup(Expr *, bool Pointer = false);
-  std::pair<ParmVarDecl *, ParmVarDecl*>
-  ReducerCallbackParams(unsigned Code, SourceLocation Loc);
-  bool ValidateReducerCallbacks(Expr *&I, Expr *&r, SourceLocation Loc);
 
   bool UseArgumentDependentLookup(const CXXScopeSpec &SS, const LookupResult &R,
                                   bool HasTrailingLParen);

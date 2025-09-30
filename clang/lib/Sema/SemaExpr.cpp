@@ -2441,7 +2441,7 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   if (HT->getCallbacks()) {
     ExprResult Callbacks =
       ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc,
-                            HT->getCallbacks().value(), true);
+                            HT->getCallbacks().value(), true, false);
     assert(!Callbacks.isInvalid());
     Expr *CallArgs[] = {VarAddr, Callbacks.get()};
     Call =
@@ -2481,7 +2481,8 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
       Call = VarAddr;
   } else {
     ExprResult Converted =
-      ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, VarAddr, true);
+      ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, VarAddr,
+                            true, false);
     if (!Converted.isInvalid()) {
       Expr *CallArgs[] = { Converted.get() };
       Call =
