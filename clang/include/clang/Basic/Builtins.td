@@ -4783,7 +4783,7 @@ def HyperLookupClass : LibBuiltin<"cilk/reducer"> {
 def HyperLookupFunctional : LibBuiltin<"cilk/reducer"> {
   let Spellings = ["__hyper_lookup_1"];
   let Attributes = [NoThrow, Pure, IgnoreSignature, RequireDeclaration];
-  let Prototype = "void*(void const*, size_t, void *)";
+  let Prototype = "void*(void const*, void *)";
 }
 
 // Leftmost view, size, identity, reduce
