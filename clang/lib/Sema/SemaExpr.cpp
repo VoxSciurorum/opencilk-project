@@ -2479,7 +2479,7 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
     // TODO: C++
     if (!Call)
       Call = VarAddr;
-  } else {
+  } else if (ResultType->isRecordType()) {
     ExprResult Converted =
       ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, VarAddr,
                             true, false);
@@ -2490,6 +2490,10 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
     }
     if (!Call)
       Call = VarAddr;
+  } else {
+    // This is a 0-argument hyperobject with a non-class type.
+    // An error was reported when the type was created.
+    Call = VarAddr;
   }
 
   // Template expansion normally strips out implicit casts, so make this

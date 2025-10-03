@@ -8,9 +8,8 @@ void function1()
 {
   int _Hyperobject y = 1;
   // expected-error@-1{{view type must be a class}}
-  (void)x; (void)y;
-  // expected-error@-1{{call to undeclared library function}}
-  // expected-note@-2{{include the header <cilk/reducer>}}
-  // Ideally the error message should refer to reducer lookup
-  // instead of a call to a function not named in user code.
+  (void)x;
+  ++x;
+  y++;
+  (void)y;
 }

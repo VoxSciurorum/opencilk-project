@@ -2124,60 +2124,58 @@ QualType Sema::BuildHyperobjectType(QualType Element,
       // contain a reference.  The view type may not be a reference.
       if (status == -1)
         Diag(Loc, diag::unsupported_hyperobject) << 5 << Element;
-    } else if (!CurContext->isDependentContext()) {
-      if (Callbacks) {
-        Expr *C = Callbacks.value();
-        QualType Actual = C->getType();
-        if (!Actual->isDependentType()) {
-          ExprResult Converted =
-            ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc,
-                                  C, false, true);
-          if (Converted.isInvalid())
-            Callbacks =
-              RecoveryExpr::Create(Context, Actual, C->getBeginLoc(),
-                                   C->getEndLoc(), { C });
-          // TODO: Make S.checkInitializerLifetime do the right thing
-          // in the case of non-lvalue callbacks.
-        }
-      } else if (!Identity) {
-        if (!Element->isRecordType() && !Element->isDependentType()) {
-          Diag(Loc, diag::err_view_must_be_class) << Element;
-        } else {
-          Expr *Fake =
-            new (Context) CXXNullPtrLiteralExpr(Context.getPointerType(Element),
-                                                Loc);
-          ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, Fake,
-                                false, false);
-          // TODO: To avoid cascading errors if ConvertForHyperobject fails
-          // the hyperobject should be marked as containing an error.
-        }
+    } if (Callbacks) {
+      Expr *C = Callbacks.value();
+      QualType Actual = C->getType();
+      if (!Actual->isDependentType()) {
+        ExprResult Converted =
+          ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc,
+                                C, false, true);
+        if (Converted.isInvalid())
+          Callbacks =
+            RecoveryExpr::Create(Context, Actual, C->getBeginLoc(),
+                                 C->getEndLoc(), { C });
+        // TODO: Make S.checkInitializerLifetime do the right thing
+        // in the case of non-lvalue callbacks.
+      }
+    } else if (!Identity) {
+      if (!Element->isRecordType() && !Element->isDependentType()) {
+        Diag(Loc, diag::err_view_must_be_class) << Element;
       } else {
-        // In the C case, the conversion must always be performed so
-        // functions are properly uniqued and converted to pointers.
-        Expr *I = *Identity, *R = *Reduce;
-        Expr *I2 = nullptr, *R2 = nullptr;
+        Expr *Fake =
+          new (Context) CXXNullPtrLiteralExpr(Context.getPointerType(Element),
+                                              Loc);
+        ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, Fake,
+                              false, false);
+        // TODO: To avoid cascading errors if ConvertForHyperobject fails
+        // the hyperobject should be marked as containing an error.
+      }
+    } else {
+      // In the C case, the conversion must always be performed so
+      // functions are properly uniqued and converted to pointers.
+      Expr *I = *Identity, *R = *Reduce;
+      Expr *I2 = nullptr, *R2 = nullptr;
 
-        ExprResult Converted1 =
-          ConvertForHyperobject(Builtin::BI__hyper_lookup_c, 2, Loc, I,
-                                true, true);
-        if (Converted1.isInvalid()) {
-          Identity = RecoveryExpr::Create(Context, Context.VoidPtrTy,
-                                          I->getBeginLoc(), I->getEndLoc(),
-                                          { I });
-        } else if ((I2 = Converted1.get())) {
-          Identity = I2;
-        }
+      ExprResult Converted1 =
+        ConvertForHyperobject(Builtin::BI__hyper_lookup_c, 2, Loc, I,
+                              true, true);
+      if (Converted1.isInvalid()) {
+        Identity = RecoveryExpr::Create(Context, Context.VoidPtrTy,
+                                        I->getBeginLoc(), I->getEndLoc(),
+                                        { I });
+      } else if ((I2 = Converted1.get())) {
+        Identity = I2;
+      }
 
-        ExprResult Converted2 =
-          ConvertForHyperobject(Builtin::BI__hyper_lookup_c, 3, Loc, R,
-                                true, true);
-        if (Converted2.isInvalid()) {
-          Reduce = RecoveryExpr::Create(Context, Context.VoidPtrTy,
-                                        R->getBeginLoc(), R->getEndLoc(),
-                                        { R });
-        } else if ((R2 = Converted2.get())) {
-          Reduce = R2;
-        }
+      ExprResult Converted2 =
+        ConvertForHyperobject(Builtin::BI__hyper_lookup_c, 3, Loc, R,
+                              true, true);
+      if (Converted2.isInvalid()) {
+        Reduce = RecoveryExpr::Create(Context, Context.VoidPtrTy,
+                                      R->getBeginLoc(), R->getEndLoc(),
+                                      { R });
+      } else if ((R2 = Converted2.get())) {
+        Reduce = R2;
       }
     }
 

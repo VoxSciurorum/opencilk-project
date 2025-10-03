@@ -123,7 +123,6 @@ template<int I> struct V { int _Hyperobject(I) field = I; };
 // expected-error@-1{{const __reducer_callbacks' could not bind to an rvalue of type 'int'}}
 
 V<0> v0;
-// expected-note@-1{{in instantiation}}
 
 int l()
 {
