@@ -11117,6 +11117,10 @@ def nested_hyperobject : Error<
    "view type %0 %select{contains|is}1 a hyperobject"
 >;
 
+def err_func_returning_hyperobject : Error<
+    "function cannot return hyperobject type %0"
+>;
+
 def reducer_registration_not_implemented: Warning<
    "reducer registration not implemented for structure members">,
     InGroup<CilkIgnored>;

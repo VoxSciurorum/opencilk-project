@@ -892,7 +892,7 @@ static int DeclContainsHyperobject(const RecordDecl *Decl, QualType &Bad,
 // It is forbidden to add new bits to the Type class so there is no
 // room for a cached or precomputed flag.  Do a deep search on every
 // hyperobject type creation.
-int TypeContainsHyperobject(QualType Contained,  QualType &Bad,
+int TypeContainsHyperobject(QualType Contained, QualType &Bad,
                             SourceLocation &Where) {
   while (true) {
     const Type *T = Contained.getCanonicalType().getTypePtr();
@@ -2762,6 +2762,11 @@ bool Sema::CheckFunctionReturnType(QualType T, SourceLocation Loc) {
   if (T->isArrayType() || T->isFunctionType()) {
     Diag(Loc, diag::err_func_returning_array_function)
       << T->isFunctionType() << T;
+    return true;
+  } else if (T->isHyperobjectType()) {
+    // TODO: Look for embedded hyperobjects.  TypeContainsHyperobject
+    // is not quite right because it checks for invalid view types.
+    Diag(Loc, diag::err_func_returning_hyperobject) << T;
     return true;
   }
 
@@ -5171,6 +5176,13 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
         D.setInvalidType(true);
         AreDeclaratorChunksValid = false;
       }
+
+      if (!D.isInvalidType() && T->isHyperobjectType()) {
+        S.Diag(DeclType.Loc, diag::err_func_returning_hyperobject) << T;
+        T = Context.IntTy;
+        D.setInvalidType(true);
+        AreDeclaratorChunksValid = false;
+      }        
 
       // Do not allow returning half FP value.
       // FIXME: This really should be in BuildFunctionType.

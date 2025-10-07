@@ -16,6 +16,9 @@ struct C : __reducer_base {
 struct C _Hyperobject c;
 // expected-error@-1{{view type 'struct C' contains a hyperobject}}
 
+extern long _Hyperobject(identity, reduce) hyper_fn(void);
+// expected-error@-1{{return hyperobject type}}
+
 long _Hyperobject(identity, reduce) d; // expected-note{{previous definition}}
 void f() {
   extern int _Hyperobject(identity, reduce) d;
