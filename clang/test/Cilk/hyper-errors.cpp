@@ -107,16 +107,22 @@ int _Hyperobject(nullptr, nullptr) zz;
 
 template<__reducer_callbacks &C>
 struct U { int _Hyperobject(C) field = 0; };
+// expected-note@-2{{template parameter is declared here}}
+// expected-note@-3{{template parameter is declared here}}
+// expected-note@-4{{template parameter is declared here}}
 
 extern struct Random {} random;
 extern struct Derived : __reducer_callbacks { } derived;
 
 U<nullptr> u0;
 // expected-error@-1{{value of type 'std::nullptr_t' is not implicitly convertible to '__reducer_callbacks &'}}
+// this generates a "template parameter is declared here" note above
 U<random> u1;
 // expected-error@-1{{value of type 'struct Random' is not implicitly convertible to '__reducer_callbacks &'}}
+// this generates a "template parameter is declared here" note above
 U<derived> u2;
 // expected-error@-1{{conversion from 'struct Derived' to '__reducer_callbacks &' is not allowed in a converted constant expression}}
+// this generates a "template parameter is declared here" note above
 // The preceding error is not designed in but is a consequence of template
 // rules.  The argument is supposed to be constant and implicit type
 // conversions are not performed for a "converted constant expression".
@@ -132,7 +138,9 @@ int l()
   int cilk_reducer(typo) x;
   // expected-error@-1{{use of undeclared identifier 'typo'}}
   return x.field;
-  // The preceding line must not crash the compiler.
+  // expected-error@-1{{base type 'int' is not a structure or union}}
+  // The preceding line must not crash the compiler.  The error is
+  // new in llvm 21.
 }
 
 struct W : public __reducer_base {

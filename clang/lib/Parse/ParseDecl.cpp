@@ -6447,27 +6447,18 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
                               !D.mayOmitIdentifier());
 
     Expr *Arg1 = nullptr, *Arg2 = nullptr;
+    bool Invalid = false;
     if (Tok.is(tok::l_paren)) {
       (void) ConsumeParen(); // Eat the parenthesis
       SmallVector<Expr *, 3> Args;
-      bool Reported = false;
       SourceLocation Close = Tok.getLocation();
 
       if (!Tok.is(tok::r_paren))
-        Reported = ParseSimpleExpressionList(Args);
+        Invalid = ParseSimpleExpressionList(Args);
       if (Tok.is(tok::r_paren))
         Close = ConsumeParen(); // Eat the parenthesis
       else
         SkipUntil(tok::r_paren, StopAtSemi);
-
-      if (!Reported) {
-        for (const Expr *Arg : Args) {
-          if (Arg->containsErrors()) {
-            Reported = true;
-            break;
-          }
-        }
-      }
 
       switch (Args.size()) {
       case 0:
@@ -6476,7 +6467,7 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
         Arg1 = Args[0];
         break;
       default:
-        if (!Reported)
+        if (!Invalid)
           Diag(Loc, diag::error_hyperobject_arguments)
             << SourceRange(Args[2]->getExprLoc(),
                            Args[Args.size() - 1]->getExprLoc());
@@ -6488,17 +6479,25 @@ void Parser::ParseDeclaratorInternal(Declarator &D,
       }
     }
 
-    D.ExtendWithDeclSpec(DS);
+    // Newer versions of clang return nothing from ParseSimpleExpressionList
+    // where older versions returned an erroneous expression.  Pretend the
+    // cilk_reducer keyword was not present if ParseSimpleExpressionList
+    // failed.
+    if (!Invalid)
+      D.ExtendWithDeclSpec(DS);
 
     // Recursively parse the declarator.
     ParseDeclaratorInternal(D, DirectDeclParser);
-    if (getLangOpts().getCilk() == LangOptions::Cilk_opencilk)
+
+    if (getLangOpts().getCilk() != LangOptions::Cilk_opencilk)
+      Diag(Loc, diag::attribute_requires_cilk) << Kind;
+    else if (Invalid)
+      ;
+    else if (getLangOpts().getCilk() == LangOptions::Cilk_opencilk)
       D.AddTypeInfo(DeclaratorChunk::getHyperobject(
                         DS.getTypeQualifiers(), Loc, SourceLocation(),
                         SourceLocation(), Arg1, Arg2),
                     std::move(DS.getAttributes()), SourceLocation());
-    else
-      Diag(Loc, diag::attribute_requires_cilk) << Kind;
   } else if (Kind == tok::star || Kind == tok::caret) {
     // Is a pointer.
     DeclSpec DS(AttrFactory);

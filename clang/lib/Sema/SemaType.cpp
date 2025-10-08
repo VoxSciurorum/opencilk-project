@@ -2046,11 +2046,11 @@ Sema::ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
     return ExprResult(false);
   auto GetCilkType =
     [this,Loc](Builtin::ID Id, unsigned Arg) -> QualType {
-      StringRef Name = Context.BuiltinInfo.getName(Id);
+      std::string Name = Context.BuiltinInfo.getName(Id);
       LookupResult R(*this, &Context.Idents.get(Name), Loc,
                      Sema::LookupOrdinaryName);
       LookupName(R, TUScope, /*AllowBuiltinCreation=*/true);
-      
+
       FunctionDecl *BuiltInDecl = R.getAsSingle<FunctionDecl>();
       if (!BuiltInDecl) {
         Diag(Loc, diag::warn_implicit_decl_requires_sysheader)
@@ -2139,7 +2139,8 @@ QualType Sema::BuildHyperobjectType(QualType Element,
         // in the case of non-lvalue callbacks.
       }
     } else if (!Identity) {
-      if (!Element->isRecordType() && !Element->isDependentType()) {
+      if (!Element->isRecordType() && !Element->isDependentType() &&
+          !Element->containsErrors()) {
         Diag(Loc, diag::err_view_must_be_class) << Element;
       } else {
         Expr *Fake =
