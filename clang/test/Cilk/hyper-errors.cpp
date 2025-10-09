@@ -161,3 +161,41 @@ Z cilk_reducer z;
 // expected-error@-1{{private base class}}
 int get_z() { return z.value; }
 // expected-error@-1{{private base class}}
+
+// View type must be unambiguously convertible to __reducer_base.
+
+struct ZA : private Z, public __reducer_base {
+  // expected-warning@-1{{due to ambiguity}}
+};
+
+ZA cilk_reducer za;
+// expected-error@-1{{ambiguous conversion}}
+
+unsigned int sizeof_ZA_reducer = sizeof (ZA cilk_reducer);
+// expected-error@-1{{ambiguous conversion}}
+// The error above is optional because a reducer has the same size
+// as its view type.
+
+typedef ZA cilk_reducer ZA_reducer;
+// expected-error@-1{{ambiguous conversion}}
+// Again, the error is optional...
+ZA_reducer za2;
+// ... but if it is not on the ZA_reducer type declaration it must be here.
+
+// Check for expected parse errors.  The exact messages are unimportant.
+// Changes should be reviewed.
+
+using ZB = Z cilk_reducer(1 +);
+// expected-error@-1{{expected expression}}
+
+using ZC = Z cilk_reducer(1, 1 +);
+// expected-error@-1{{expected expression}}
+
+using ZD = Z cilk_reducer(cilk_reducer);
+// expected-error@-1{{expected expression}}
+
+int cilk_reducer = 0;
+// expected-error@-1{{unqualified-id}}
+
+// All parse errors should have been recovered from.
+int eof = -1;

@@ -72,3 +72,7 @@ void _Hyperobject(identity, reduce) v;
 // expected-error@-1{{hyperobject has incomplete view type 'void'}}
 //typedef int empty[0];
 //empty _Hyperobject(identity, reduce) ee;
+
+// It would be nice to support this syntax some day.
+int cilk_reducer(0, +) int_add_reducer;
+// expected-error@-1{{expected expression}}
