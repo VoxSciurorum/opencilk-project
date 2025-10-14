@@ -3,11 +3,11 @@
 extern void reduce(void *, void *), identity(void *);
 
 struct __reducer_base { };
-extern "C" __reducer_base *__hyper_lookup_0(__reducer_base *);
+extern "C" __reducer_base *__hyper_lookup_class(__reducer_base *);
 struct __reducer_callbacks {
   __reducer_callbacks(__reducer_callbacks &) = delete;
 };
-extern "C" void *__hyper_lookup_1(void *, const __reducer_callbacks &);
+extern "C" void *__hyper_lookup_internal_1(void *, const __reducer_callbacks &);
 
 struct C : __reducer_base {
   int _Hyperobject(identity, reduce) c = 0;

@@ -5169,27 +5169,21 @@ def CountedByRef : Builtin {
 
 // One pointer to leftmost view with polymorphic type.
 def HyperLookupClass : LibBuiltin<"cilk/reducer"> {
-  let Spellings = ["__hyper_lookup_0"];
+  let Spellings = ["__hyper_lookup_class"];
   let Attributes = [NoThrow, Pure, IgnoreSignature, RequireDeclaration];
   let Prototype = "void*(void const*)";
 }
 
 // Leftmost view, size, callback class with polymorphic type.
 def HyperLookupFunctional : LibBuiltin<"cilk/reducer"> {
-  let Spellings = ["__hyper_lookup_1"];
-  let Attributes = [NoThrow, Pure, IgnoreSignature, RequireDeclaration];
-  let Prototype = "void*(void const*, void *)";
+  let Spellings = ["__hyper_lookup_internal_1"];
+  let Attributes = [NoThrow, Pure, CustomTypeChecking, RequireDeclaration];
+  let Prototype = "void&(void const*, void *)";
 }
 
 // Leftmost view, size, identity, reduce
-def HyperLookup : Builtin {
-  let Spellings = ["__hyper_lookup_c"];
-  let Attributes = [NoThrow, Pure];
-  let Prototype = "void*(void const*, size_t, 1, 2)";
-}
-
-def HyperLookupSimple : Builtin {
-  let Spellings = ["__hyper_lookup_simple"];
+def HyperLookupInternal2 : Builtin {
+  let Spellings = ["__hyper_lookup_internal_2"];
   let Attributes = [NoThrow, Pure, CustomTypeChecking];
-  let Prototype = "void(void)";
+  let Prototype = "void&(void const*, size_t, 1, 2)";
 }

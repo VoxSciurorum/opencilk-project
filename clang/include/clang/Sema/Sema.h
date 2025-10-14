@@ -2958,6 +2958,10 @@ private:
   /// This checks that the target supports __builtin_setjmp.
   bool BuiltinSetjmp(CallExpr *TheCall);
 
+  /// BuiltinHyperLookupSimple - Check the reference variant
+  /// of hyperobject view lookup.
+  bool BuiltinHyperLookupSimple(CallExpr *TheCall, unsigned NumArgs);
+
   /// We have a call to a function like __sync_fetch_and_add, which is an
   /// overloaded function based on the pointer type of its first argument.
   /// The main BuildCallExpr routines have already promoted the types of

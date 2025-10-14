@@ -11740,7 +11740,11 @@ def err_callbacks_must_be_class : Error<
 >;
 
 def note_protected_by_reducer : Note<
-  "jump bypasses initialization of variable with __attribute__((reducer))">;
+  "jump bypasses initialization of hyperobject">;
+
+def err_hyper_lookup_internal : Error<
+   "__hyper_lookup_interal expects %select{a hyperobject|an lvalue|a reference|an integer|a pointer}0"
+>;
 
 def err_hyperobject_param : Error<"parameter is hyperobject">;
 

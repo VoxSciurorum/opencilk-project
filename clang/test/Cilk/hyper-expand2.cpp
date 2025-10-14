@@ -4,7 +4,7 @@
 extern double X[], Y[];
 
 struct Base { };
-extern "C" struct Base *__hyper_lookup_0(struct Base *);
+extern "C" struct Base *__hyper_lookup_class(struct Base *);
 
 template<typename T>
 struct Box : public Base { T value; };

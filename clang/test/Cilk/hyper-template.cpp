@@ -6,7 +6,7 @@ struct Base {
   virtual void reduce(void *, void *);
 };
 
-extern "C" void *__hyper_lookup_0(struct Base *);
+extern "C" void *__hyper_lookup_class(struct Base *);
 
 template<typename T> struct S : public Base {
   T member;

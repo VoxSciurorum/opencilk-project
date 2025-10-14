@@ -1,7 +1,7 @@
 // RUN: %clang_cc1 %s -fopencilk -verify -fsyntax-only
 struct __reducer_callbacks { int a, b, c; };
 
-extern "C" void *__hyper_lookup_1(void *, const __reducer_callbacks &)
+extern "C" void *__hyper_lookup_internal_1(void *, const __reducer_callbacks &)
   __attribute__((nonnull, returns_nonnull));
 
 extern struct __reducer_callbacks *C;
@@ -28,7 +28,7 @@ void f()
 
 struct view { int field; };
 
-extern "C" void *__hyper_lookup_0(view *)
+extern "C" void *__hyper_lookup_class(view *)
   __attribute__((nonnull, returns_nonnull));
 
 void g()

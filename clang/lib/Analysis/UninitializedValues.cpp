@@ -262,8 +262,13 @@ static const Expr *stripCasts(ASTContext &C, const Expr *Ex) {
 /// variable.
 static FindVarResult findVar(const Expr *E, const DeclContext *DC) {
   if (const CallExpr *C = dyn_cast<CallExpr>(E)) {
-    if (C->getBuiltinCallee() == Builtin::BI__hyper_lookup_simple)
+    switch (C->getBuiltinCallee()) {
+    case Builtin::BI__hyper_lookup_internal_1:
+    case Builtin::BI__hyper_lookup_internal_2:
       return findVar(C->getArg(0), DC);
+    default:
+      break;
+    }
   }
   if (const auto *DRE =
           dyn_cast<DeclRefExpr>(stripCasts(DC->getParentASTContext(), E)))

@@ -2129,7 +2129,7 @@ QualType Sema::BuildHyperobjectType(QualType Element,
       QualType Actual = C->getType();
       if (!Actual->isDependentType()) {
         ExprResult Converted =
-          ConvertForHyperobject(Builtin::BI__hyper_lookup_1, 1, Loc,
+          ConvertForHyperobject(Builtin::BI__hyper_lookup_internal_1, 1, Loc,
                                 C, false, true);
         if (Converted.isInvalid())
           Callbacks =
@@ -2146,7 +2146,7 @@ QualType Sema::BuildHyperobjectType(QualType Element,
         Expr *Fake =
           new (Context) CXXNullPtrLiteralExpr(Context.getPointerType(Element),
                                               Loc);
-        ConvertForHyperobject(Builtin::BI__hyper_lookup_0, 0, Loc, Fake,
+        ConvertForHyperobject(Builtin::BI__hyper_lookup_class, 0, Loc, Fake,
                               false, false);
         // TODO: To avoid cascading errors if ConvertForHyperobject fails
         // the hyperobject should be marked as containing an error.
@@ -2158,8 +2158,8 @@ QualType Sema::BuildHyperobjectType(QualType Element,
       Expr *I2 = nullptr, *R2 = nullptr;
 
       ExprResult Converted1 =
-        ConvertForHyperobject(Builtin::BI__hyper_lookup_c, 2, Loc, I,
-                              true, true);
+        ConvertForHyperobject(Builtin::BI__hyper_lookup_internal_2, 2,
+                              Loc, I, true, true);
       if (Converted1.isInvalid()) {
         Identity = RecoveryExpr::Create(Context, Context.VoidPtrTy,
                                         I->getBeginLoc(), I->getEndLoc(),
@@ -2169,8 +2169,8 @@ QualType Sema::BuildHyperobjectType(QualType Element,
       }
 
       ExprResult Converted2 =
-        ConvertForHyperobject(Builtin::BI__hyper_lookup_c, 3, Loc, R,
-                              true, true);
+        ConvertForHyperobject(Builtin::BI__hyper_lookup_internal_2, 3,
+                              Loc, R, true, true);
       if (Converted2.isInvalid()) {
         Reduce = RecoveryExpr::Create(Context, Context.VoidPtrTy,
                                       R->getBeginLoc(), R->getEndLoc(),
