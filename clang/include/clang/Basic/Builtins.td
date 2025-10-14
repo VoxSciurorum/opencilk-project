@@ -5187,3 +5187,9 @@ def HyperLookup : Builtin {
   let Attributes = [NoThrow, Pure];
   let Prototype = "void*(void const*, size_t, 1, 2)";
 }
+
+def HyperLookupSimple : Builtin {
+  let Spellings = ["__hyper_lookup_simple"];
+  let Attributes = [NoThrow, Pure, CustomTypeChecking];
+  let Prototype = "void(void)";
+}

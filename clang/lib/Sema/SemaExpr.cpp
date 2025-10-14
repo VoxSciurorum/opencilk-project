@@ -2410,6 +2410,27 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
     SizeExpr = IntegerLiteral::Create(Context, Size, SizeType, E->getExprLoc());
   }
 
+  // If this is a C-style hyperobject computation of the address of
+  // the variable can be deferred until codegen.
+  if (!Pointer && !HT->getElementType()->isDependentType() &&
+      HT->getIdentity()) {
+    std::string Name =
+      Context.BuiltinInfo.getName(Builtin::BI__hyper_lookup_simple);
+    LookupResult R(*this, &Context.Idents.get(Name), Loc,
+                   Sema::LookupOrdinaryName);
+    LookupName(R, TUScope, /*AllowBuiltinCreation=*/true);
+    FunctionDecl *BuiltInDecl = R.getAsSingle<FunctionDecl>();
+    ExprResult DeclRef =
+      BuildDeclRefExpr(BuiltInDecl, BuiltInDecl->getType(), VK_LValue, Loc);
+    assert(DeclRef.isUsable());
+    Expr *CallArgs[] =
+      {E, SizeExpr.get(), *HT->getIdentity(), *HT->getReduce()};
+    ExprResult Call =
+      CallExpr::Create(Context, DeclRef.get(), CallArgs, HT->getElementType(),
+                       VK_LValue, Loc, FPOptionsOverride(), 4);
+    return Call.get();
+  }
+
   Expr *VarAddr;
   if (Pointer) {
     // Strip off the hyperobject wrapper here.  A derived to base
