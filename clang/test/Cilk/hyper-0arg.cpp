@@ -11,7 +11,7 @@ struct __reducer_base {
   virtual void reduce(__reducer_base *l, __reducer_base *r) = 0;
 };
 
-extern "C" void *__hyper_lookup_class(__reducer_base *)
+extern "C" __reducer_base *__hyper_lookup_class(__reducer_base *)
   __attribute__((nonnull, returns_nonnull));
 
 struct R : public __reducer_base {

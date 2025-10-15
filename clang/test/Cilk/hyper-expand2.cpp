@@ -3,7 +3,7 @@
 
 extern double X[], Y[];
 
-struct Base { };
+struct Base { virtual void polymorphic(); };
 extern "C" struct Base *__hyper_lookup_class(struct Base *);
 
 template<typename T>

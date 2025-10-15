@@ -2144,8 +2144,8 @@ QualType Sema::BuildHyperobjectType(QualType Element,
         Diag(Loc, diag::err_view_must_be_class) << Element;
       } else {
         Expr *Fake =
-          new (Context) CXXNullPtrLiteralExpr(Context.getPointerType(Element),
-                                              Loc);
+          new (Context) OpaqueValueExpr(Loc, Context.getPointerType(Element),
+                                        VK_LValue);
         ConvertForHyperobject(Builtin::BI__hyper_lookup_class, 0, Loc, Fake,
                               false, false);
         // TODO: To avoid cascading errors if ConvertForHyperobject fails

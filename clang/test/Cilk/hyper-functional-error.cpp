@@ -28,7 +28,7 @@ void f()
 
 struct view { int field; };
 
-extern "C" void *__hyper_lookup_class(view *)
+extern "C" view *__hyper_lookup_class(view *)
   __attribute__((nonnull, returns_nonnull));
 
 void g()
@@ -36,5 +36,5 @@ void g()
   int cilk_reducer a;
   // expected-error@-1{{view type must be a class when hyperobject has no callbacks}}
   S cilk_reducer b;
-  // expected-error@-1{{cannot initialize a parameter of type 'view *' with an rvalue of type 'S *'}}
+  // expected-error@-1{{cannot initialize a parameter of type 'view *' with an lvalue of type 'S *'}}
 }

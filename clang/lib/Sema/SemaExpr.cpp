@@ -2485,7 +2485,13 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E) {
     ConvertForHyperobject(Builtin::BI__hyper_lookup_class, 0, Loc, VarAddr,
                           true, false);
   Expr *Call = nullptr;
+  // Remember the root the view type hiearchy.  If it is a virtual
+  // base class of the view type a dynamic cast must be used below.
+  const CXXRecordDecl *BaseRecord = nullptr;
   if (!Converted.isInvalid()) {
+    if (const PointerType *BP =
+        Converted.get()->getType()->getAs<PointerType>())
+      BaseRecord = BP->getPointeeType()->getAsCXXRecordDecl();
     Expr *CallArgs[] = { Converted.get() };
     Call =
       BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup_class,
@@ -2495,22 +2501,22 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E) {
     Call = VarAddr;
 
   // Template expansion normally strips out implicit casts, so make this
-  // explicit in C++.
-  Expr *Casted = nullptr;
-  if (CurContext->isDependentContext())
-    // Based on logic in CoroutineStmtBuilder::makeNewAndDeleteExpr()
-    Casted =
-        BuildCXXNamedCast(Loc, tok::kw_static_cast,
-                          Context.getTrivialTypeSourceInfo(Ptr), Call,
-                          SourceRange(Loc, Loc), SourceRange(Loc, Loc))
-            .get();
-  else
-    Casted =
-        ImplicitCastExpr::Create(Context, Ptr, CK_BitCast, Call, nullptr,
-                                 VK_PRValue, CurFPFeatureOverrides());
+  // explicit in C++.  Only C++ code reaches here.  A dynamic_cast is
+  // needed if the result of view lookup is a virtual base class.
+  // Based on logic in CoroutineStmtBuilder::makeNewAndDeleteExpr()
+  tok::TokenKind style = tok::kw_static_cast;
+  if (BaseRecord)
+    if (CXXRecordDecl *ViewRecord = ViewType->getAsCXXRecordDecl())
+      if (ViewRecord->isVirtuallyDerivedFrom(BaseRecord))
+        style = tok::kw_dynamic_cast;
 
-  return UnaryOperator::Create(Context, Casted, UO_Deref, ViewType,
-                               VK_LValue, OK_Ordinary, SourceLocation(),
+  ExprResult Casted =
+    BuildCXXNamedCast(Loc, style, Context.getTrivialTypeSourceInfo(Ptr),
+                      Call, SourceRange(Loc, Loc), SourceRange(Loc, Loc));
+  return UnaryOperator::Create(Context,
+                               Casted.isInvalid() ? Call : Casted.get(),
+                               UO_Deref, ViewType, VK_LValue,
+                               OK_Ordinary, SourceLocation(),
                                false, CurFPFeatureOverrides());
 }
 

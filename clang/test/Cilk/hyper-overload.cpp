@@ -4,7 +4,7 @@
 struct S { int operator&(); };
 extern int operator+(S &, int);
 
-extern "C" void *__hyper_lookup_class(struct S *);
+extern "C" S *__hyper_lookup_class(S *);
 
 // Behavior without hyperobjects
 // CHECK-LABEL: f1

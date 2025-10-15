@@ -4,7 +4,7 @@
 struct __reducer_base { int a, b, c; };
 struct __reducer_callbacks { int d, e, f; };
 
-extern "C" void *__hyper_lookup_class(__reducer_base *);
+extern "C" __reducer_base *__hyper_lookup_class(__reducer_base *);
 extern "C" void *__hyper_lookup_internal_1(void *, const __reducer_callbacks &);
 
 struct Extra { int d; };
