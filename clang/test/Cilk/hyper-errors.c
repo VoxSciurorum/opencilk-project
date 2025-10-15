@@ -76,3 +76,11 @@ void _Hyperobject(identity, reduce) v;
 // It would be nice to support this syntax some day.
 int cilk_reducer(0, +) int_add_reducer;
 // expected-error@-1{{expected expression}}
+
+int vv(int x)
+{
+  typedef int vla_t[x];
+  vla_t cilk_reducer(identity, reduce) vla;
+  // expected-error@-1{{variable length type 'vla_t' (aka 'int[x]') may not be a hyperobject}}
+  return vla[0];
+}

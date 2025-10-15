@@ -2373,11 +2373,44 @@ NonOdrUseReason Sema::getNonOdrUseReasonInCurrentContext(ValueDecl *D) {
   return NOUR_None;
 }
 
-// If Pointer is true the expression is on the left hand side of
-// the arrow operator.  It will ordinarily not be an lvalue in
-// this case.
-Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
-  if (!Pointer && !E->isGLValue())
+// Resolve hyperobject on left hand side of arrow operator.
+// The expression will not be an lvalue.
+Expr *Sema::BuildHyperobjectLookupBase(Expr *E) {
+  // Error or not yet completed type.
+  if (E->getDependence() != ExprDependence::None)
+    return E;
+
+  if (getLangOpts().getCilk() != LangOptions::Cilk_opencilk)
+    return E;
+
+  const PointerType *PT = E->getType()->getAs<PointerType>();
+  if (!PT)
+    return E;
+  QualType Ty = PT->getPointeeType();
+
+  const HyperobjectType *HT = Ty->getAs<HyperobjectType>();
+  if (!HT)
+    return E;
+  QualType ViewType = HT->getElementType().withFastQualifiers(
+      Ty.getLocalFastQualifiers());
+  QualType Ptr = Context.getPointerType(ViewType);
+
+  // E is known to be a pointer to hyperobject.  Compute &lookup(*E).
+  Expr *Deref = UnaryOperator::Create(Context, E, UO_Deref, Ty,
+                                      VK_LValue, OK_Ordinary, E->getExprLoc(),
+                                      false, CurFPFeatureOverrides());
+  Expr *View = BuildHyperobjectLookup(Deref);
+  if (!View)
+    return E;
+
+  return UnaryOperator::Create(Context, View, UO_AddrOf, Ptr, VK_PRValue,
+                               OK_Ordinary, E->getExprLoc(), false,
+                               CurFPFeatureOverrides());
+}
+
+// Resolve a hyperobject used in an lvalue context.
+Expr *Sema::BuildHyperobjectLookup(Expr *E) {
+  if (!E->isGLValue())
     return E;
 
   // Error or not yet completed type.
@@ -2387,24 +2420,17 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   if (getLangOpts().getCilk() != LangOptions::Cilk_opencilk)
     return E;
 
-  QualType InputType = E->getType();
-  if (Pointer) {
-    const PointerType *PT = InputType->getAs<PointerType>();
-    if (!PT)
-      return E;
-    InputType = PT->getPointeeType();
-  }
-
-  const HyperobjectType *HT = InputType->getAs<HyperobjectType>();
+  const HyperobjectType *HT = E->getType()->getAs<HyperobjectType>();
   if (!HT)
     return E;
 
   QualType ViewType = HT->getElementType().withFastQualifiers(
-      InputType.getLocalFastQualifiers());
+      E->getType().getLocalFastQualifiers());
   QualType Ptr = Context.getPointerType(ViewType);
 
   SourceLocation Loc = E->getExprLoc();
-  assert(!ViewType.getTypePtr()->isDependentType());
+  // View size is a constant here.  Hyperobjects with variable length
+  // views are rejected in BuildHyperobjectType.
   QualType SizeType = Context.getSizeType();
   llvm::APInt Size(Context.getTypeSize(SizeType),
                    Context.getTypeSizeInChars(ViewType).getQuantity());
@@ -2427,13 +2453,6 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
       BuildDeclRefExpr(BuiltInDecl, BuiltInDecl->getType(), VK_LValue, Loc);
     assert(DeclRef.isUsable() && "Builtin reference cannot fail");
 
-    // In a normal case, lookup(val).
-    // On the left hand side of an arrow, &lookup(*val).
-    if (Pointer)
-      E = UnaryOperator::Create(Context, E, UO_Deref, ViewType,
-                                VK_LValue, OK_Ordinary, Loc,
-                                false, CurFPFeatureOverrides());
-
     Expr *Call = nullptr;
     if (Code == Builtin::BI__hyper_lookup_internal_2) {
       Expr *Args[] =
@@ -2450,10 +2469,6 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
       Call = CallExpr::Create(Context, DeclRef.get(), Args, ViewType,
                               VK_LValue, Loc, FPOptionsOverride());
     }
-    if (Pointer)
-      return UnaryOperator::Create(Context, Call, UO_AddrOf, Ptr, VK_PRValue,
-                                   OK_Ordinary, E->getExprLoc(), false,
-                                   CurFPFeatureOverrides());
     return Call;
   }
 
@@ -2461,20 +2476,10 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   // type is not a record type.
   assert(ViewType->isRecordType());
 
-  Expr *VarAddr;
-  if (Pointer) {
-    // Strip off the hyperobject wrapper here.  A derived to base
-    // cast may follow.
-    ExprResult Converted =
-      ImpCastExprToType(E, Ptr, CK_BitCast, VK_PRValue);
-    assert(Converted.isUsable());
-    VarAddr = Converted.get();
-  } else {
-    assert(!HT->getElementType()->isDependentType()); // checked above
-    VarAddr = UnaryOperator::Create(Context, E, UO_AddrOf, Ptr, VK_PRValue,
-                                    OK_Ordinary, E->getExprLoc(), false,
-                                    CurFPFeatureOverrides());
-  }
+  assert(!HT->getElementType()->isDependentType()); // checked above
+  Expr *VarAddr = UnaryOperator::Create(Context, E, UO_AddrOf, Ptr, VK_PRValue,
+                                        OK_Ordinary, E->getExprLoc(), false,
+                                        CurFPFeatureOverrides());
 
   ExprResult Converted =
     ConvertForHyperobject(Builtin::BI__hyper_lookup_class, 0, Loc, VarAddr,
@@ -2504,14 +2509,9 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
         ImplicitCastExpr::Create(Context, Ptr, CK_BitCast, Call, nullptr,
                                  VK_PRValue, CurFPFeatureOverrides());
 
-  if (Pointer)
-    return Casted;
-
-  auto *Deref = UnaryOperator::Create(Context, Casted, UO_Deref, ViewType,
-                                      VK_LValue, OK_Ordinary, SourceLocation(),
-                                      false, CurFPFeatureOverrides());
-
-  return Deref;
+  return UnaryOperator::Create(Context, Casted, UO_Deref, ViewType,
+                               VK_LValue, OK_Ordinary, SourceLocation(),
+                               false, CurFPFeatureOverrides());
 }
 
 DeclRefExpr *

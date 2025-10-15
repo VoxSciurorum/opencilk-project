@@ -7189,7 +7189,8 @@ public:
   ConvertForHyperobject(Builtin::ID Builtin, unsigned Argument,
                         SourceLocation Loc, Expr *Value,
                         bool Perform, bool Warn);
-  Expr *BuildHyperobjectLookup(Expr *, bool Pointer = false);
+  Expr *BuildHyperobjectLookupBase(Expr *);
+  Expr *BuildHyperobjectLookup(Expr *);
 
   bool UseArgumentDependentLookup(const CXXScopeSpec &SS, const LookupResult &R,
                                   bool HasTrailingLParen);
