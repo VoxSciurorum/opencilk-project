@@ -2380,11 +2380,11 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   if (!Pointer && !E->isGLValue())
     return E;
 
-  if (getLangOpts().getCilk() != LangOptions::Cilk_opencilk)
-    return E;
-
   // Error or not yet completed type.
   if (E->getDependence() != ExprDependence::None)
+    return E;
+
+  if (getLangOpts().getCilk() != LangOptions::Cilk_opencilk)
     return E;
 
   QualType InputType = E->getType();
@@ -2426,6 +2426,13 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
     ExprResult DeclRef =
       BuildDeclRefExpr(BuiltInDecl, BuiltInDecl->getType(), VK_LValue, Loc);
     assert(DeclRef.isUsable() && "Builtin reference cannot fail");
+
+    // In a normal case, lookup(val).
+    // On the left hand side of an arrow, &lookup(*val).
+    if (Pointer)
+      E = UnaryOperator::Create(Context, E, UO_Deref, ViewType,
+                                VK_LValue, OK_Ordinary, Loc,
+                                false, CurFPFeatureOverrides());
 
     Expr *Call = nullptr;
     if (Code == Builtin::BI__hyper_lookup_internal_2) {
