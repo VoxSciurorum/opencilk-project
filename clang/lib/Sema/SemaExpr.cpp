@@ -681,7 +681,8 @@ ExprResult Sema::DefaultLvalueConversion(Expr *E) {
   CheckForNullPointerDereference(*this, E);
 
   E = BuildHyperobjectLookup(E);
-  assert(T == E->getType() && "Unexpected Type from hyperobject lookup.");
+  if (T != E->getType())
+    assert(E->containsErrors() && "Unexpected Type from hyperobject lookup");
 
   if (const ObjCIsaExpr *OISA = dyn_cast<ObjCIsaExpr>(E->IgnoreParenCasts())) {
     NamedDecl *ObjectGetClass = LookupSingleName(TUScope,
@@ -2372,6 +2373,9 @@ NonOdrUseReason Sema::getNonOdrUseReasonInCurrentContext(ValueDecl *D) {
   return NOUR_None;
 }
 
+// If Pointer is true the expression is on the left hand side of
+// the arrow operator.  It will ordinarily not be an lvalue in
+// this case.
 Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   if (!Pointer && !E->isGLValue())
     return E;
@@ -2395,25 +2399,20 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   if (!HT)
     return E;
 
-  QualType ResultType = HT->getElementType().withFastQualifiers(
+  QualType ViewType = HT->getElementType().withFastQualifiers(
       InputType.getLocalFastQualifiers());
-  QualType Ptr = Context.getPointerType(ResultType);
+  QualType Ptr = Context.getPointerType(ViewType);
 
   SourceLocation Loc = E->getExprLoc();
-  ExprResult SizeExpr;
-  if (ResultType.getTypePtr()->isDependentType()) {
-    SizeExpr = CreateUnaryExprOrTypeTraitExpr(E, Loc, UETT_SizeOf);
-  } else {
-    QualType SizeType = Context.getSizeType();
-    llvm::APInt Size(Context.getTypeSize(SizeType),
-                     Context.getTypeSizeInChars(ResultType).getQuantity());
-    SizeExpr = IntegerLiteral::Create(Context, Size, SizeType, E->getExprLoc());
-  }
+  assert(!ViewType.getTypePtr()->isDependentType());
+  QualType SizeType = Context.getSizeType();
+  llvm::APInt Size(Context.getTypeSize(SizeType),
+                   Context.getTypeSizeInChars(ViewType).getQuantity());
+  ExprResult SizeExpr =
+    IntegerLiteral::Create(Context, Size, SizeType, E->getExprLoc());
 
-  // If this is not used in an addressable context taking the address of the
-  // variable can be deferred until codegen.  An addressable context is
-  // the 0-argument hyperobject type with class view or an expression on
-  // the left hand side of an arrow operator.
+  // For variants with callbacks taking the address of the variable
+  // can be deferred until codegen.
   if (HT->getIdentity() || HT->getCallbacks()) {
     unsigned Code =
       HT->getIdentity() ? Builtin::BI__hyper_lookup_internal_2 :
@@ -2434,14 +2433,14 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
         {E, SizeExpr.get(), *HT->getIdentity(), *HT->getReduce()};
       // Can not use BuildBuiltinCallExpr because it would recurse doing
       // lvalue conversion on the first argument.
-      Call = CallExpr::Create(Context, DeclRef.get(), Args, ResultType,
+      Call = CallExpr::Create(Context, DeclRef.get(), Args, ViewType,
                               VK_LValue, Loc, FPOptionsOverride());
     } else {
       ExprResult Callbacks =
         ConvertForHyperobject(Builtin::BI__hyper_lookup_internal_1, 1, Loc,
                               HT->getCallbacks().value(), true, false);
       Expr *Args[] = {E, Callbacks.get()};
-      Call = CallExpr::Create(Context, DeclRef.get(), Args, ResultType,
+      Call = CallExpr::Create(Context, DeclRef.get(), Args, ViewType,
                               VK_LValue, Loc, FPOptionsOverride());
     }
     if (Pointer)
@@ -2451,6 +2450,10 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
     return Call;
   }
 
+  // The hyperobject type should be marked erroneous if the view
+  // type is not a record type.
+  assert(ViewType->isRecordType());
+
   Expr *VarAddr;
   if (Pointer) {
     // Strip off the hyperobject wrapper here.  A derived to base
@@ -2459,28 +2462,22 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
       ImpCastExprToType(E, Ptr, CK_BitCast, VK_PRValue);
     assert(Converted.isUsable());
     VarAddr = Converted.get();
-  } else if (HT->getElementType()->isDependentType()) {
-    ExprResult Address =
-      BuildBuiltinCallExpr(Loc, Builtin::BI__builtin_addressof, E);
-    assert(Address.isUsable());
-    VarAddr = Address.get();
   } else {
+    assert(!HT->getElementType()->isDependentType()); // checked above
     VarAddr = UnaryOperator::Create(Context, E, UO_AddrOf, Ptr, VK_PRValue,
                                     OK_Ordinary, E->getExprLoc(), false,
                                     CurFPFeatureOverrides());
   }
 
+  ExprResult Converted =
+    ConvertForHyperobject(Builtin::BI__hyper_lookup_class, 0, Loc, VarAddr,
+                          true, false);
   Expr *Call = nullptr;
-  if (ResultType->isRecordType()) {
-    ExprResult Converted =
-      ConvertForHyperobject(Builtin::BI__hyper_lookup_class, 0, Loc, VarAddr,
-                            true, false);
-    if (!Converted.isInvalid()) {
-      Expr *CallArgs[] = { Converted.get() };
-      Call =
-        BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup_class,
-                             CallArgs, true);
-    }
+  if (!Converted.isInvalid()) {
+    Expr *CallArgs[] = { Converted.get() };
+    Call =
+      BuildBuiltinCallExpr(Loc, Builtin::BI__hyper_lookup_class,
+                           CallArgs, true);
   }
   if (!Call)
     Call = VarAddr;
@@ -2503,7 +2500,7 @@ Expr *Sema::BuildHyperobjectLookup(Expr *E, bool Pointer) {
   if (Pointer)
     return Casted;
 
-  auto *Deref = UnaryOperator::Create(Context, Casted, UO_Deref, ResultType,
+  auto *Deref = UnaryOperator::Create(Context, Casted, UO_Deref, ViewType,
                                       VK_LValue, OK_Ordinary, SourceLocation(),
                                       false, CurFPFeatureOverrides());
 

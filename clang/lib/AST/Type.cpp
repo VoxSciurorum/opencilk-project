@@ -3611,7 +3611,8 @@ QualType QualType::stripHyperobject() const {
 HyperobjectType::HyperobjectType(QualType Element, QualType CanonicalPtr)
   : Type(Hyperobject, CanonicalPtr, Element->getDependence()),
     ElementType(Element) {
-  if (Element->isIncompleteType()) // diagnosed in caller
+  // these errors are diagnosed in the caller
+  if (Element->isIncompleteType() || !Element->isRecordType())
     addDependence(TypeDependence::Error);
   addDependence(Element->getDependence());
 }
